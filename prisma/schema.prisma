@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMIN
+  ENCARGADO_AREA
+  OPERADOR
+  USUARIO
+}
+
+enum EstadoImportacion {
+  IMPORTADO
+  ELIMINADO
+  ERROR
+}
+
+model Usuario {
+  id        String   @id @default(cuid())
+  usuario   String   @unique
+  nombre    String
+  password  String
+  rol       Rol      @default(OPERADOR)
+  activo    Boolean  @default(true)
+
+  combinacionesCreadas Combinacion[] @relation("CombinacionCreatedBy")
+  conteosCreados       Conteo[]      @relation("ConteoCreatedBy")
+  importacionesExcel   ImportacionExcel[] @relation("ImportacionCreatedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lote {
+  id     String @id @default(cuid())
+  nombre String @unique
+
+  sectores      Sector[]
+  combinaciones Combinacion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Sector {
+  id     String @id @default(cuid())
+  nombre String
+
+  loteId String
+  lote   Lote   @relation(fields: [loteId], references: [id], onDelete: Cascade)
+
+  combinaciones Combinacion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([loteId, nombre])
+  @@index([loteId])
+}
+
+model Variedad {
+  id     String @id @default(cuid())
+  nombre String @unique
+
+  combinaciones Combinacion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Planta {
+  id     String @id @default(cuid())
+  numero String @unique
+
+  conteos Conteo[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Semana {
+  id          String   @id @default(cuid())
+  anio        Int
+  numero      Int
+  fechaInicio DateTime
+  fechaFin    DateTime
+
+  combinaciones Combinacion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([anio, numero])
+  @@index([anio])
+  @@index([numero])
+}
+
+model ImportacionExcel {
+  id            String             @id @default(cuid())
+  archivoNombre String
+  estado        EstadoImportacion  @default(IMPORTADO)
+
+  filasProcesadas Int @default(0)
+  filasImportadas Int @default(0)
+  filasConError   Int @default(0)
+
+  lotesCreados      Int @default(0)
+  sectoresCreados   Int @default(0)
+  variedadesCreadas Int @default(0)
+  plantasCreadas    Int @default(0)
+
+  resumenErrores Json?
+
+  createdById String?
+  createdBy   Usuario? @relation("ImportacionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  deletedAt DateTime?
+  deletedById String?
+
+  conteos Conteo[]
+  combinacionesCreadas Combinacion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([estado])
+  @@index([createdAt])
+}
+
+model Combinacion {
+  id    String   @id @default(cuid())
+  fecha DateTime
+
+  semanaId String
+  semana   Semana @relation(fields: [semanaId], references: [id], onDelete: Cascade)
+
+  loteId String
+  lote   Lote   @relation(fields: [loteId], references: [id], onDelete: Restrict)
+
+  sectorId String
+  sector   Sector @relation(fields: [sectorId], references: [id], onDelete: Restrict)
+
+  variedadId String
+  variedad   Variedad @relation(fields: [variedadId], references: [id], onDelete: Restrict)
+
+  createdById String?
+  createdBy   Usuario? @relation("CombinacionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdFromImportacionId String?
+  createdFromImportacion   ImportacionExcel? @relation(fields: [createdFromImportacionId], references: [id], onDelete: SetNull)
+
+  conteos Conteo[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([semanaId, loteId, sectorId, variedadId])
+  @@index([semanaId])
+  @@index([loteId])
+  @@index([sectorId])
+  @@index([variedadId])
+  @@index([createdById])
+  @@index([createdAt])
+  @@index([createdFromImportacionId])
+}
+
+model Conteo {
+  id String @id @default(cuid())
+
+  combinacionId String
+  combinacion   Combinacion @relation(fields: [combinacionId], references: [id], onDelete: Cascade)
+
+  plantaId String
+  planta   Planta @relation(fields: [plantaId], references: [id], onDelete: Restrict)
+
+  fc Int @default(0)
+  fa Int @default(0)
+
+  fechaRegistro DateTime @default(now())
+
+  createdById String?
+  createdBy   Usuario? @relation("ConteoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  importacionId String?
+  importacion   ImportacionExcel? @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([combinacionId, plantaId])
+  @@index([combinacionId])
+  @@index([plantaId])
+  @@index([createdById])
+  @@index([fechaRegistro])
+  @@index([createdAt])
+  @@index([importacionId])
+}

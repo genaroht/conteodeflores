@@ -39,7 +39,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(data.redirectTo || "/combinaciones");
     router.refresh();
   }
 

@@ -2,6 +2,7 @@
 import {
   BarChart3,
   Flower2,
+  KeyRound,
   LayoutDashboard,
   Settings2
 } from "lucide-react";
@@ -20,7 +21,7 @@ const links: MobileLink[] = [
     href: "/dashboard",
     label: "Inicio",
     icon: LayoutDashboard,
-    roles: ["ADMIN", "ENCARGADO_AREA", "OPERADOR", "USUARIO"]
+    roles: ["ADMIN", "ENCARGADO_AREA"]
   },
   {
     href: "/combinaciones",
@@ -39,12 +40,25 @@ const links: MobileLink[] = [
     label: "Reportes",
     icon: BarChart3,
     roles: ["ADMIN", "ENCARGADO_AREA"]
+  },
+  {
+    href: "/perfil",
+    label: "Clave",
+    icon: KeyRound,
+    roles: ["OPERADOR", "USUARIO"]
   }
 ];
 
 type MobileNavProps = {
   rol?: RolSistema | string;
 };
+
+function columnas(cantidad: number) {
+  if (cantidad <= 1) return "grid-cols-1";
+  if (cantidad === 2) return "grid-cols-2";
+  if (cantidad === 3) return "grid-cols-3";
+  return "grid-cols-4";
+}
 
 export function MobileNav({ rol = "OPERADOR" }: MobileNavProps) {
   const rolActual = String(rol) as RolSistema;
@@ -55,7 +69,7 @@ export function MobileNav({ rol = "OPERADOR" }: MobileNavProps) {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#DDE7E1] bg-white px-2 pb-[env(safe-area-inset-bottom)] pt-2 shadow-lg lg:hidden">
-      <div className="grid grid-cols-4 gap-1">
+      <div className={`grid ${columnas(visibles.length)} gap-1`}>
         {visibles.map((link) => {
           const Icon = link.icon;
 

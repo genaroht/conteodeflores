@@ -7,7 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/ToastProvider";
 
-type TipoListado = "lotes" | "sectores" | "variedades" | "plantas";
+type TipoListado = "lotes" | "sectores" | "variedades";
 
 type Lote = {
   id: string;
@@ -29,11 +29,6 @@ type Variedad = {
   nombre: string;
 };
 
-type Planta = {
-  id: string;
-  numero: string;
-};
-
 type ApiList<T> = {
   items: T[];
   page: number;
@@ -51,8 +46,7 @@ type DeleteTarget = {
 function tipoTitulo(tipo: TipoListado) {
   if (tipo === "lotes") return "Lotes";
   if (tipo === "sectores") return "Sectores";
-  if (tipo === "variedades") return "Variedades";
-  return "Plantas";
+  return "Variedades";
 }
 
 export default function CrearDetallesPage() {
@@ -64,7 +58,6 @@ export default function CrearDetallesPage() {
   const [nuevoSector, setNuevoSector] = useState("");
   const [sectorLoteId, setSectorLoteId] = useState("");
   const [nuevaVariedad, setNuevaVariedad] = useState("");
-  const [nuevaPlanta, setNuevaPlanta] = useState("");
 
   const [tipo, setTipo] = useState<TipoListado>("lotes");
   const [busqueda, setBusqueda] = useState("");
@@ -76,7 +69,6 @@ export default function CrearDetallesPage() {
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [sectores, setSectores] = useState<Sector[]>([]);
   const [variedades, setVariedades] = useState<Variedad[]>([]);
-  const [plantas, setPlantas] = useState<Planta[]>([]);
 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [deleting, setDeleting] = useState(false);
@@ -85,9 +77,8 @@ export default function CrearDetallesPage() {
   const rows = useMemo(() => {
     if (tipo === "lotes") return lotes;
     if (tipo === "sectores") return sectores;
-    if (tipo === "variedades") return variedades;
-    return plantas;
-  }, [tipo, lotes, sectores, variedades, plantas]);
+    return variedades;
+  }, [tipo, lotes, sectores, variedades]);
 
   async function cargarLotesSelect() {
     const response = await fetch("/api/lotes?pageSize=500", {
@@ -124,7 +115,6 @@ export default function CrearDetallesPage() {
     if (tipoActual === "lotes") setLotes(data.items || []);
     if (tipoActual === "sectores") setSectores(data.items || []);
     if (tipoActual === "variedades") setVariedades(data.items || []);
-    if (tipoActual === "plantas") setPlantas(data.items || []);
 
     setTotal(data.total || 0);
     setTotalPages(data.totalPages || 1);
@@ -132,10 +122,12 @@ export default function CrearDetallesPage() {
 
   useEffect(() => {
     cargarLotesSelect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     cargarListado(tipo, page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, page]);
 
   async function crear(
@@ -156,10 +148,6 @@ export default function CrearDetallesPage() {
 
     if (tipoCrear === "variedades") {
       body = { nombre: nuevaVariedad };
-    }
-
-    if (tipoCrear === "plantas") {
-      body = { numero: nuevaPlanta };
     }
 
     const response = await fetch(`/api/${tipoCrear}`, {
@@ -183,7 +171,6 @@ export default function CrearDetallesPage() {
     setNuevoSector("");
     setSectorLoteId("");
     setNuevaVariedad("");
-    setNuevaPlanta("");
 
     setTipo(tipoCrear);
     setPage(1);
@@ -267,11 +254,11 @@ export default function CrearDetallesPage() {
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Crea lotes, sectores, variedades y plantas. Luego consulta cada listado con búsqueda y paginación.
+            Crea lotes, sectores y variedades. Las plantas se generan automáticamente al registrar conteos.
           </p>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-2">
+        <section className="grid gap-6 xl:grid-cols-3">
           <div className="card-base space-y-4">
             <h2 className="text-lg font-black text-[#10231A]">Crear lote</h2>
 
@@ -348,24 +335,6 @@ export default function CrearDetallesPage() {
               </button>
             </form>
           </div>
-
-          <div className="card-base space-y-4">
-            <h2 className="text-lg font-black text-[#10231A]">Crear planta</h2>
-
-            <form className="flex gap-2" onSubmit={(e) => crear(e, "plantas")}>
-              <input
-                className="input-base"
-                value={nuevaPlanta}
-                onChange={(e) => setNuevaPlanta(e.target.value)}
-                placeholder="Nueva planta"
-                required
-              />
-
-              <button className="button-primary" type="submit">
-                Crear
-              </button>
-            </form>
-          </div>
         </section>
 
         <section className="card-base">
@@ -373,17 +342,15 @@ export default function CrearDetallesPage() {
             Ver detalles registrados
           </h2>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {(["lotes", "sectores", "variedades", "plantas"] as TipoListado[]).map(
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {(["lotes", "sectores", "variedades"] as TipoListado[]).map(
               (item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => seleccionarTipo(item)}
                   className={
-                    tipo === item
-                      ? "button-primary"
-                      : "button-secondary"
+                    tipo === item ? "button-primary" : "button-secondary"
                   }
                 >
                   <Eye className="mr-2 h-5 w-5" />
@@ -492,25 +459,6 @@ export default function CrearDetallesPage() {
                     />
                   ))}
 
-                {tipo === "plantas" &&
-                  (rows as Planta[]).map((item) => (
-                    <PlantaRow
-                      key={item.id}
-                      item={item}
-                      saving={savingId === item.id}
-                      onSave={(numero) =>
-                        actualizar("plantas", item.id, { numero })
-                      }
-                      onDelete={() =>
-                        setDeleteTarget({
-                          tipo: "plantas",
-                          id: item.id,
-                          label: `planta ${item.numero}`
-                        })
-                      }
-                    />
-                  ))}
-
                 {rows.length === 0 ? (
                   <tr>
                     <td
@@ -527,10 +475,7 @@ export default function CrearDetallesPage() {
 
           <div className="mt-5 space-y-4 md:hidden">
             {rows.map((item) => {
-              const label =
-                tipo === "plantas"
-                  ? (item as Planta).numero
-                  : (item as Lote | Sector | Variedad).nombre;
+              const label = (item as Lote | Sector | Variedad).nombre;
 
               const loteNombre =
                 tipo === "sectores" ? (item as Sector).lote?.nombre || "" : "";
@@ -638,7 +583,7 @@ function LoteRow({
             disabled={saving}
           >
             <Save className="mr-2 h-4 w-4" />
-            Guardar
+            {saving ? "Guardando..." : "Guardar"}
           </button>
 
           <button
@@ -704,7 +649,7 @@ function SectorRow({
             disabled={saving}
           >
             <Save className="mr-2 h-4 w-4" />
-            Guardar
+            {saving ? "Guardando..." : "Guardar"}
           </button>
 
           <button
@@ -753,56 +698,7 @@ function VariedadRow({
             disabled={saving}
           >
             <Save className="mr-2 h-4 w-4" />
-            Guardar
-          </button>
-
-          <button
-            type="button"
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
-            onClick={onDelete}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Eliminar
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function PlantaRow({
-  item,
-  saving,
-  onSave,
-  onDelete
-}: {
-  item: Planta;
-  saving: boolean;
-  onSave: (numero: string) => void;
-  onDelete: () => void;
-}) {
-  const [numero, setNumero] = useState(item.numero);
-
-  return (
-    <tr className="border-t border-[#DDE7E1]">
-      <td className="px-4 py-3">
-        <input
-          className="input-base"
-          value={numero}
-          onChange={(event) => setNumero(event.target.value)}
-        />
-      </td>
-
-      <td className="px-4 py-3">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="button-secondary min-h-10 px-3 py-2 text-sm"
-            onClick={() => onSave(numero)}
-            disabled={saving}
-          >
-            <Save className="mr-2 h-4 w-4" />
-            Guardar
+            {saving ? "Guardando..." : "Guardar"}
           </button>
 
           <button

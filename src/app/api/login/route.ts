@@ -10,6 +10,14 @@ import {
 import { loginSchema } from "@/lib/validations";
 import { normalizarUsuario } from "@/lib/utils";
 
+function rutaInicialPorRol(rol: string) {
+  if (rol === "ADMIN" || rol === "ENCARGADO_AREA") {
+    return "/dashboard";
+  }
+
+  return "/combinaciones";
+}
+
 export async function POST(request: Request) {
   const body = await request.json();
   const parsed = loginSchema.safeParse(body);
@@ -71,7 +79,8 @@ export async function POST(request: Request) {
 
   const response = NextResponse.json({
     ok: true,
-    message: "Login correcto."
+    message: "Login correcto.",
+    redirectTo: rutaInicialPorRol(usuario.rol)
   });
 
   response.cookies.set({

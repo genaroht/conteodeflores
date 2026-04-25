@@ -1,15 +1,53 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import { puedeModificarRegistro } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
-import { conteoUpdateSchema } from "@/lib/validations";
 
 type Params = {
   params: Promise<{
     id: string;
   }>;
 };
+
+const conteoUpdateSchema = z.object({
+  fc: z
+    .union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((value) => {
+      if (value === "" || value === null || value === undefined) {
+        return 0;
+      }
+
+      const numero = Number(value);
+
+      if (!Number.isFinite(numero)) {
+        return Number.NaN;
+      }
+
+      return Math.trunc(numero);
+    })
+    .refine((value) => Number.isInteger(value) && value >= 0, {
+      message: "FC debe ser un número entero mayor o igual a 0."
+    }),
+  fa: z
+    .union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((value) => {
+      if (value === "" || value === null || value === undefined) {
+        return 0;
+      }
+
+      const numero = Number(value);
+
+      if (!Number.isFinite(numero)) {
+        return Number.NaN;
+      }
+
+      return Math.trunc(numero);
+    })
+    .refine((value) => Number.isInteger(value) && value >= 0, {
+      message: "FA debe ser un número entero mayor o igual a 0."
+    })
+});
 
 export async function PATCH(request: Request, { params }: Params) {
   const session = await getSession();
@@ -19,40 +57,38 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   const { id } = await params;
-
-  const conteo = await prisma.conteo.findUnique({
-    where: { id }
-  });
-
-  if (!conteo) {
-    return NextResponse.json({ message: "Conteo no encontrado." }, { status: 404 });
-  }
-
-  if (
-    !puedeModificarRegistro({
-      session,
-      createdAt: conteo.createdAt,
-      createdById: conteo.createdById
-    })
-  ) {
-    return NextResponse.json(
-      {
-        message:
-          "No tienes permiso para editar este conteo. Solo ADMIN puede editar días anteriores."
-      },
-      { status: 403 }
-    );
-  }
-
   const body = await request.json();
+
   const parsed = conteoUpdateSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ message: "Datos inválidos." }, { status: 400 });
+    return NextResponse.json(
+      {
+        message: parsed.error.issues[0]?.message || "Datos inválidos."
+      },
+      { status: 400 }
+    );
+  }
+
+  const existe = await prisma.conteo.findUnique({
+    where: {
+      id
+    }
+  });
+
+  if (!existe) {
+    return NextResponse.json(
+      {
+        message: "Conteo no encontrado."
+      },
+      { status: 404 }
+    );
   }
 
   const item = await prisma.conteo.update({
-    where: { id },
+    where: {
+      id
+    },
     data: {
       fc: parsed.data.fc,
       fa: parsed.data.fa
@@ -62,7 +98,11 @@ export async function PATCH(request: Request, { params }: Params) {
     }
   });
 
-  return NextResponse.json({ item });
+  return NextResponse.json({
+    ok: true,
+    message: "Conteo actualizado correctamente.",
+    item
+  });
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
@@ -74,33 +114,29 @@ export async function DELETE(_request: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const conteo = await prisma.conteo.findUnique({
-    where: { id }
+  const existe = await prisma.conteo.findUnique({
+    where: {
+      id
+    }
   });
 
-  if (!conteo) {
-    return NextResponse.json({ message: "Conteo no encontrado." }, { status: 404 });
-  }
-
-  if (
-    !puedeModificarRegistro({
-      session,
-      createdAt: conteo.createdAt,
-      createdById: conteo.createdById
-    })
-  ) {
+  if (!existe) {
     return NextResponse.json(
       {
-        message:
-          "No tienes permiso para eliminar este conteo. Solo ADMIN puede eliminar días anteriores."
+        message: "Conteo no encontrado."
       },
-      { status: 403 }
+      { status: 404 }
     );
   }
 
   await prisma.conteo.delete({
-    where: { id }
+    where: {
+      id
+    }
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    message: "Conteo eliminado correctamente."
+  });
 }

@@ -1,9 +1,25 @@
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { calcularSemana, formatearFechaInput } from "@/lib/semana";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { combinacionSchema } from "@/lib/validations";
+
+function crearRangoFecha(fecha?: string | null) {
+  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return null;
+  }
+
+  const inicio = new Date(`${fecha}T00:00:00.000Z`);
+  const fin = new Date(inicio);
+  fin.setUTCDate(fin.getUTCDate() + 1);
+
+  return {
+    gte: inicio,
+    lt: fin
+  };
+}
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -19,26 +35,34 @@ export async function GET(request: Request) {
     Math.max(Number(searchParams.get("pageSize") || 10), 1),
     100
   );
+
   const q = searchParams.get("q")?.trim() || "";
+  const fecha = searchParams.get("fecha");
   const exact = searchParams.get("exact") === "1";
   const buscarExacto = exact && /^\d+$/.test(q);
+  const rangoFecha = crearRangoFecha(fecha);
 
-  const filtroTexto = q
+  const filtroTexto: Prisma.StringFilter | undefined = q
     ? buscarExacto
       ? {
           equals: q,
-          mode: "insensitive" as const
+          mode: "insensitive"
         }
       : {
           contains: q,
-          mode: "insensitive" as const
+          mode: "insensitive"
         }
     : undefined;
 
-  const where = {
+  const where: Prisma.CombinacionWhereInput = {
     ...(session.rol === "OPERADOR" || session.rol === "USUARIO"
       ? {
           createdById: session.id
+        }
+      : {}),
+    ...(rangoFecha
+      ? {
+          fecha: rangoFecha
         }
       : {}),
     ...(filtroTexto

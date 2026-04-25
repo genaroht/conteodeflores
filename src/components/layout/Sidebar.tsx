@@ -31,7 +31,7 @@ const links: SidebarLink[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
-    roles: ["ADMIN", "ENCARGADO_AREA", "OPERADOR", "USUARIO"]
+    roles: ["ADMIN", "ENCARGADO_AREA"]
   },
   {
     href: "/combinaciones",
@@ -78,17 +78,23 @@ function nombreRol(rol: string) {
   return "USUARIO";
 }
 
+function rutaInicial(rol: string) {
+  if (rol === "ADMIN" || rol === "ENCARGADO_AREA") {
+    return "/dashboard";
+  }
+
+  return "/combinaciones";
+}
+
 export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
   const rolActual = String(session.rol);
 
-  const linksVisibles = links.filter((link) =>
-    link.roles.includes(rolActual)
-  );
+  const linksVisibles = links.filter((link) => link.roles.includes(rolActual));
 
   return (
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-72 border-r border-[#DDE7E1] bg-white px-5 py-6 lg:flex lg:flex-col">
-      <Link href="/dashboard" className="mb-6 flex items-center gap-3">
+      <Link href={rutaInicial(rolActual)} className="mb-6 flex items-center gap-3">
         <Image
           src="/logo-agrokasa.png"
           alt="Agrokasa"

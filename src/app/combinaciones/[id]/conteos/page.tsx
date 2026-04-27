@@ -57,14 +57,54 @@ function crearIdTemporal() {
   return crypto.randomUUID();
 }
 
-function numeroSeguro(value: string) {
-  const numero = Number(value);
+function esSoloDigitos(value: string) {
+  return /^\d+$/.test(value);
+}
 
-  if (!Number.isFinite(numero)) {
+function esEnteroPositivo(value: string) {
+  const limpio = value.trim();
+
+  if (!esSoloDigitos(limpio)) {
+    return false;
+  }
+
+  const numero = Number(limpio);
+
+  return Number.isSafeInteger(numero) && numero > 0;
+}
+
+function esEnteroNoNegativo(value: string) {
+  const limpio = value.trim();
+
+  if (limpio === "") {
+    return true;
+  }
+
+  if (!esSoloDigitos(limpio)) {
+    return false;
+  }
+
+  const numero = Number(limpio);
+
+  return Number.isSafeInteger(numero) && numero >= 0;
+}
+
+function normalizarEntero(value: string) {
+  return String(Number(value.trim()));
+}
+
+function numeroSeguro(value: string) {
+  const limpio = value.trim();
+
+  if (limpio === "") {
     return 0;
   }
 
-  return Math.trunc(numero);
+  if (!esEnteroNoNegativo(limpio)) {
+    return 0;
+  }
+
+  return Number(limpio);
 }
 
 function formatoFecha(fecha: string) {
@@ -95,14 +135,19 @@ export default function ConteosPage() {
     return new Set(conteosGuardados.map((conteo) => conteo.planta.numero));
   }, [conteosGuardados]);
 
-  function obtenerSiguientePlanta(filasActuales = filas) {
-    const numerosGuardados = conteosGuardados
-      .map((conteo) => Number(conteo.planta.numero))
-      .filter((numero) => Number.isFinite(numero));
+  function obtenerSiguientePlanta(
+    filasActuales = filas,
+    conteosActuales = conteosGuardados
+  ) {
+    const numerosGuardados = conteosActuales
+      .map((conteo) => conteo.planta.numero)
+      .filter((numero) => esEnteroPositivo(numero))
+      .map((numero) => Number(numero));
 
     const numerosFilas = filasActuales
-      .map((fila) => Number(fila.plantaNumero))
-      .filter((numero) => Number.isFinite(numero));
+      .map((fila) => fila.plantaNumero)
+      .filter((numero) => esEnteroPositivo(numero))
+      .map((numero) => Number(numero));
 
     const maximo = Math.max(0, ...numerosGuardados, ...numerosFilas);
 
@@ -149,8 +194,14 @@ export default function ConteosPage() {
   function actualizarFila(
     id: string,
     campo: keyof Omit<FilaConteo, "id">,
-    value: string
+    rawValue: string
   ) {
+    const value = rawValue.trim();
+
+    if (value !== "" && !esSoloDigitos(value)) {
+      return;
+    }
+
     setFilas((actuales) =>
       actuales.map((fila) =>
         fila.id === id
@@ -174,26 +225,34 @@ export default function ConteosPage() {
     });
   }
 
-  function eliminarFila(id: string) {
-    setFilas((actuales) => {
-      const nuevas = actuales.filter((fila) => fila.id !== id);
-
-      if (nuevas.length === 0) {
-        return [crearFila([])];
-      }
-
-      return nuevas;
-    });
-  }
-
   function validarFilas() {
-    const plantas = filas.map((fila) => fila.plantaNumero.trim());
+    const plantasOriginales = filas.map((fila) => fila.plantaNumero.trim());
 
-    const vacias = plantas.filter((planta) => !planta);
+    const vacias = plantasOriginales.filter((planta) => !planta);
 
     if (vacias.length > 0) {
       return "Todas las filas deben tener N° de planta.";
     }
+
+    const plantasInvalidas = plantasOriginales.filter(
+      (planta) => !esEnteroPositivo(planta)
+    );
+
+    if (plantasInvalidas.length > 0) {
+      return "El N° de planta debe ser un número entero mayor que 0. No se permiten decimales como 3.1.";
+    }
+
+    const conteosInvalidos = filas.some(
+      (fila) => !esEnteroNoNegativo(fila.fc) || !esEnteroNoNegativo(fila.fa)
+    );
+
+    if (conteosInvalidos) {
+      return "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales.";
+    }
+
+    const plantas = plantasOriginales.map((planta) =>
+      normalizarEntero(planta)
+    );
 
     const repetidasEnFormulario = plantas.filter(
       (planta, index) => plantas.indexOf(planta) !== index
@@ -207,8 +266,14 @@ export default function ConteosPage() {
       )}. Cada planta solo puede tener un conteo.`;
     }
 
+    const plantasGuardadasNormalizadas = new Set(
+      Array.from(plantasGuardadas)
+        .filter((planta) => esEnteroPositivo(planta))
+        .map((planta) => normalizarEntero(planta))
+    );
+
     const repetidasConGuardadas = plantas.filter((planta) =>
-      plantasGuardadas.has(planta)
+      plantasGuardadasNormalizadas.has(planta)
     );
 
     if (repetidasConGuardadas.length > 0) {
@@ -217,14 +282,6 @@ export default function ConteosPage() {
       return `La planta ${unicas.join(
         ", "
       )} ya tiene conteo guardado. Edita el conteo guardado en vez de volver a registrarlo.`;
-    }
-
-    const negativos = filas.some(
-      (fila) => numeroSeguro(fila.fc) < 0 || numeroSeguro(fila.fa) < 0
-    );
-
-    if (negativos) {
-      return "FC y FA no pueden ser negativos.";
     }
 
     return "";
@@ -248,7 +305,7 @@ export default function ConteosPage() {
       body: JSON.stringify({
         combinacionId,
         filas: filas.map((fila) => ({
-          plantaNumero: fila.plantaNumero.trim(),
+          plantaNumero: normalizarEntero(fila.plantaNumero),
           fc: fila.fc === "" ? 0 : numeroSeguro(fila.fc),
           fa: fila.fa === "" ? 0 : numeroSeguro(fila.fa)
         }))
@@ -266,31 +323,17 @@ export default function ConteosPage() {
 
     toast.success(data.message || "Conteos guardados correctamente.");
 
-    await cargarCombinacion();
+    const combinacionActualizada = await cargarCombinacion();
+    const conteosActualizados = combinacionActualizada?.conteos || [];
 
     setFilas([
       {
         id: crearIdTemporal(),
-        plantaNumero: "",
+        plantaNumero: obtenerSiguientePlanta([], conteosActualizados),
         fc: "",
         fa: ""
       }
     ]);
-
-    setTimeout(() => {
-      setFilas((actuales) => {
-        if (actuales[0]?.plantaNumero) {
-          return actuales;
-        }
-
-        return [
-          {
-            ...actuales[0],
-            plantaNumero: obtenerSiguientePlanta([])
-          }
-        ];
-      });
-    }, 100);
   }
 
   async function eliminarConteoGuardado() {
@@ -367,10 +410,10 @@ export default function ConteosPage() {
             <table className="w-full min-w-[410px] table-fixed text-left text-xs sm:text-sm">
               <thead className="bg-[#E8F5EE] text-[#0B7A3B]">
                 <tr>
-                  <th className="w-[26%] px-2 py-3 sm:px-4">Planta</th>
-                  <th className="w-[24%] px-2 py-3 sm:px-4">FC</th>
-                  <th className="w-[24%] px-2 py-3 sm:px-4">FA</th>
-                  <th className="w-[26%] px-2 py-3 sm:px-4">Acciones</th>
+                  <th className="w-[28%] px-2 py-3 sm:px-4">Planta</th>
+                  <th className="w-[26%] px-2 py-3 sm:px-4">FC</th>
+                  <th className="w-[26%] px-2 py-3 sm:px-4">FA</th>
+                  <th className="w-[20%] px-2 py-3 sm:px-4">Acciones</th>
                 </tr>
               </thead>
 
@@ -378,25 +421,27 @@ export default function ConteosPage() {
                 {filas.map((fila, index) => (
                   <tr key={fila.id} className="border-t border-[#DDE7E1]">
                     <td className="px-2 py-3 sm:px-4">
-                    <input
-                      type="number"
-                      min={1}
-                      className="h-10 w-full rounded-2xl border border-[#B8CFC4] bg-[#DCE8E2] px-3 font-black text-[#10231A] shadow-inner outline-none transition focus:border-[#0B7A3B] focus:bg-white focus:ring-4 focus:ring-[#E8F5EE] sm:h-12 sm:px-4"
-                      value={fila.plantaNumero}
-                      onChange={(event) =>
-                        actualizarFila(
-                          fila.id,
-                          "plantaNumero",
-                          event.target.value
-                        )
-                      }
-                    />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className="h-10 w-full rounded-2xl border border-[#B8CFC4] bg-[#DCE8E2] px-3 font-black text-[#10231A] shadow-inner outline-none transition focus:border-[#0B7A3B] focus:bg-white focus:ring-4 focus:ring-[#E8F5EE] sm:h-12 sm:px-4"
+                        value={fila.plantaNumero}
+                        onChange={(event) =>
+                          actualizarFila(
+                            fila.id,
+                            "plantaNumero",
+                            event.target.value
+                          )
+                        }
+                      />
                     </td>
 
                     <td className="px-2 py-3 sm:px-4">
                       <input
-                        type="number"
-                        min={0}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         className="input-base h-10 !px-2 sm:h-12 sm:!px-4"
                         value={fila.fc}
                         onChange={(event) =>
@@ -408,8 +453,9 @@ export default function ConteosPage() {
 
                     <td className="px-2 py-3 sm:px-4">
                       <input
-                        type="number"
-                        min={0}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         className="input-base h-10 !px-2 sm:h-12 sm:!px-4"
                         value={fila.fa}
                         onChange={(event) =>
@@ -420,27 +466,15 @@ export default function ConteosPage() {
                     </td>
 
                     <td className="px-2 py-3 sm:px-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#DDE7E1] bg-white font-black text-[#0B7A3B] hover:bg-[#E8F5EE]"
-                          onClick={() => agregarFilaDespues(index)}
-                          title="Agregar fila"
-                          aria-label="Agregar fila"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
-
-                        <button
-                          type="button"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 bg-red-50 font-black text-red-700 hover:bg-red-100"
-                          onClick={() => eliminarFila(fila.id)}
-                          title="Eliminar fila"
-                          aria-label="Eliminar fila"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#DDE7E1] bg-white font-black text-[#0B7A3B] hover:bg-[#E8F5EE]"
+                        onClick={() => agregarFilaDespues(index)}
+                        title="Agregar fila"
+                        aria-label="Agregar fila"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -541,18 +575,14 @@ function ConteosGuardados({
 
   const totalPages = Math.max(Math.ceil(itemsOrdenados.length / pageSize), 1);
 
+  const paginaSegura = Math.min(pagina, totalPages);
+
   const itemsPagina = useMemo(() => {
-    const inicio = (pagina - 1) * pageSize;
+    const inicio = (paginaSegura - 1) * pageSize;
     const fin = inicio + pageSize;
 
     return itemsOrdenados.slice(inicio, fin);
-  }, [itemsOrdenados, pagina]);
-
-  useEffect(() => {
-    if (pagina > totalPages) {
-      setPagina(totalPages);
-    }
-  }, [pagina, totalPages]);
+  }, [itemsOrdenados, paginaSegura]);
 
   if (items.length === 0) {
     return (
@@ -562,8 +592,8 @@ function ConteosGuardados({
     );
   }
 
-  const desde = (pagina - 1) * pageSize + 1;
-  const hasta = Math.min(pagina * pageSize, itemsOrdenados.length);
+  const desde = (paginaSegura - 1) * pageSize + 1;
+  const hasta = Math.min(paginaSegura * pageSize, itemsOrdenados.length);
 
   return (
     <div className="mt-4 space-y-4">
@@ -595,14 +625,14 @@ function ConteosGuardados({
       <div className="flex flex-col gap-3 rounded-2xl border border-[#DDE7E1] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm font-semibold text-slate-500">
           Mostrando {desde} - {hasta} de {itemsOrdenados.length} · Página{" "}
-          {pagina} de {totalPages}
+          {paginaSegura} de {totalPages}
         </p>
 
         <div className="grid grid-cols-2 gap-3 sm:flex">
           <button
             type="button"
             className="button-secondary"
-            disabled={pagina <= 1}
+            disabled={paginaSegura <= 1}
             onClick={() => setPagina((actual) => Math.max(actual - 1, 1))}
           >
             Anterior
@@ -611,7 +641,7 @@ function ConteosGuardados({
           <button
             type="button"
             className="button-secondary"
-            disabled={pagina >= totalPages}
+            disabled={paginaSegura >= totalPages}
             onClick={() =>
               setPagina((actual) => Math.min(actual + 1, totalPages))
             }
@@ -640,7 +670,21 @@ function ConteoGuardadoRow({
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
+  useEffect(() => {
+    if (!editando) {
+      setFc(String(item.fc));
+      setFa(String(item.fa));
+    }
+  }, [item.fc, item.fa, editando]);
+
   async function guardar() {
+    if (!esEnteroNoNegativo(fc) || !esEnteroNoNegativo(fa)) {
+      toast.error(
+        "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales."
+      );
+      return;
+    }
+
     setGuardando(true);
 
     const response = await fetch(`/api/conteos/${item.id}`, {
@@ -649,8 +693,8 @@ function ConteoGuardadoRow({
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        fc,
-        fa
+        fc: fc === "" ? 0 : numeroSeguro(fc),
+        fa: fa === "" ? 0 : numeroSeguro(fa)
       })
     });
 
@@ -675,11 +719,18 @@ function ConteoGuardadoRow({
       <td className="px-2 py-3 sm:px-4">
         {editando ? (
           <input
-            type="number"
-            min={0}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             className="input-base h-10 !px-2 sm:h-12 sm:!px-4"
             value={fc}
-            onChange={(event) => setFc(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value.trim();
+
+              if (value === "" || esSoloDigitos(value)) {
+                setFc(value);
+              }
+            }}
           />
         ) : (
           item.fc
@@ -689,11 +740,18 @@ function ConteoGuardadoRow({
       <td className="px-2 py-3 sm:px-4">
         {editando ? (
           <input
-            type="number"
-            min={0}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             className="input-base h-10 !px-2 sm:h-12 sm:!px-4"
             value={fa}
-            onChange={(event) => setFa(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value.trim();
+
+              if (value === "" || esSoloDigitos(value)) {
+                setFa(value);
+              }
+            }}
           />
         ) : (
           item.fa

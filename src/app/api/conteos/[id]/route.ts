@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { puedeModificarRegistro } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
@@ -10,43 +11,37 @@ type Params = {
   }>;
 };
 
+const numeroEnteroSchema = z
+  .union([z.string(), z.number(), z.null(), z.undefined()])
+  .transform((value) => {
+    if (value === "" || value === null || value === undefined) {
+      return 0;
+    }
+
+    if (typeof value === "string") {
+      const limpio = value.trim();
+
+      if (limpio === "") {
+        return 0;
+      }
+
+      if (!/^\d+$/.test(limpio)) {
+        return Number.NaN;
+      }
+
+      return Number(limpio);
+    }
+
+    return value;
+  })
+  .refine((value) => Number.isSafeInteger(value) && value >= 0, {
+    message:
+      "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales."
+  });
+
 const conteoUpdateSchema = z.object({
-  fc: z
-    .union([z.string(), z.number(), z.null(), z.undefined()])
-    .transform((value) => {
-      if (value === "" || value === null || value === undefined) {
-        return 0;
-      }
-
-      const numero = Number(value);
-
-      if (!Number.isFinite(numero)) {
-        return Number.NaN;
-      }
-
-      return Math.trunc(numero);
-    })
-    .refine((value) => Number.isInteger(value) && value >= 0, {
-      message: "FC debe ser un número entero mayor o igual a 0."
-    }),
-  fa: z
-    .union([z.string(), z.number(), z.null(), z.undefined()])
-    .transform((value) => {
-      if (value === "" || value === null || value === undefined) {
-        return 0;
-      }
-
-      const numero = Number(value);
-
-      if (!Number.isFinite(numero)) {
-        return Number.NaN;
-      }
-
-      return Math.trunc(numero);
-    })
-    .refine((value) => Number.isInteger(value) && value >= 0, {
-      message: "FA debe ser un número entero mayor o igual a 0."
-    })
+  fc: numeroEnteroSchema,
+  fa: numeroEnteroSchema
 });
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -73,6 +68,11 @@ export async function PATCH(request: Request, { params }: Params) {
   const existe = await prisma.conteo.findUnique({
     where: {
       id
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      createdById: true
     }
   });
 
@@ -82,6 +82,22 @@ export async function PATCH(request: Request, { params }: Params) {
         message: "Conteo no encontrado."
       },
       { status: 404 }
+    );
+  }
+
+  if (
+    !puedeModificarRegistro({
+      session,
+      createdAt: existe.createdAt,
+      createdById: existe.createdById
+    })
+  ) {
+    return NextResponse.json(
+      {
+        message:
+          "No tienes permiso para editar este conteo. Solo ADMIN puede editar días anteriores."
+      },
+      { status: 403 }
     );
   }
 
@@ -117,6 +133,11 @@ export async function DELETE(_request: Request, { params }: Params) {
   const existe = await prisma.conteo.findUnique({
     where: {
       id
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      createdById: true
     }
   });
 
@@ -126,6 +147,22 @@ export async function DELETE(_request: Request, { params }: Params) {
         message: "Conteo no encontrado."
       },
       { status: 404 }
+    );
+  }
+
+  if (
+    !puedeModificarRegistro({
+      session,
+      createdAt: existe.createdAt,
+      createdById: existe.createdById
+    })
+  ) {
+    return NextResponse.json(
+      {
+        message:
+          "No tienes permiso para eliminar este conteo. Solo ADMIN puede eliminar días anteriores."
+      },
+      { status: 403 }
     );
   }
 

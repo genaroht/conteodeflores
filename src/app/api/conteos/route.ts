@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { puedeModificarRegistro } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
@@ -9,7 +10,15 @@ const numeroPlantaSchema = z
   .transform((value) => String(value).trim())
   .refine((value) => value.length > 0, {
     message: "La planta es obligatoria."
-  });
+  })
+  .refine((value) => /^\d+$/.test(value), {
+    message: "La planta debe ser un número entero. No se permiten decimales."
+  })
+  .transform((value) => Number(value))
+  .refine((value) => Number.isSafeInteger(value) && value > 0, {
+    message: "La planta debe ser un número entero mayor que 0."
+  })
+  .transform((value) => String(value));
 
 const numeroEnteroSchema = z
   .union([z.string(), z.number(), z.null(), z.undefined()])
@@ -18,16 +27,25 @@ const numeroEnteroSchema = z
       return 0;
     }
 
-    const numero = Number(value);
+    if (typeof value === "string") {
+      const limpio = value.trim();
 
-    if (!Number.isFinite(numero)) {
-      return Number.NaN;
+      if (limpio === "") {
+        return 0;
+      }
+
+      if (!/^\d+$/.test(limpio)) {
+        return Number.NaN;
+      }
+
+      return Number(limpio);
     }
 
-    return Math.trunc(numero);
+    return value;
   })
-  .refine((value) => Number.isInteger(value) && value >= 0, {
-    message: "FC y FA deben ser números enteros mayores o iguales a 0."
+  .refine((value) => Number.isSafeInteger(value) && value >= 0, {
+    message:
+      "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales."
   });
 
 const conteosSchema = z.object({
@@ -55,6 +73,10 @@ function obtenerRepetidos(valores: string[]) {
     .map(([valor]) => valor);
 }
 
+function esOperadorOSuario(rol: string) {
+  return rol === "OPERADOR" || rol === "USUARIO";
+}
+
 export async function GET(request: Request) {
   const session = await getSession();
 
@@ -75,6 +97,33 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { message: "Falta combinacionId." },
       { status: 400 }
+    );
+  }
+
+  const combinacion = await prisma.combinacion.findUnique({
+    where: {
+      id: combinacionId
+    },
+    select: {
+      id: true,
+      createdById: true
+    }
+  });
+
+  if (!combinacion) {
+    return NextResponse.json(
+      { message: "La combinación no existe." },
+      { status: 404 }
+    );
+  }
+
+  if (
+    esOperadorOSuario(session.rol) &&
+    combinacion.createdById !== session.id
+  ) {
+    return NextResponse.json(
+      { message: "No tienes permiso para ver esta combinación." },
+      { status: 403 }
     );
   }
 
@@ -134,7 +183,9 @@ export async function POST(request: Request) {
       id: combinacionId
     },
     select: {
-      id: true
+      id: true,
+      createdAt: true,
+      createdById: true
     }
   });
 
@@ -142,6 +193,22 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { message: "La combinación no existe." },
       { status: 404 }
+    );
+  }
+
+  if (
+    !puedeModificarRegistro({
+      session,
+      createdAt: combinacion.createdAt,
+      createdById: combinacion.createdById
+    })
+  ) {
+    return NextResponse.json(
+      {
+        message:
+          "No tienes permiso para registrar conteos en esta combinación."
+      },
+      { status: 403 }
     );
   }
 

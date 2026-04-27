@@ -16,8 +16,24 @@ const numeroNoNegativo = z.coerce
   .number({
     invalid_type_error: "Debe ser un número."
   })
-  .min(0, "No puede ser negativo.")
-  .transform((value) => Math.trunc(value));
+  .int("Debe ser un número entero.")
+  .min(0, "No puede ser negativo.");
+
+const numeroPlanta = textoObligatorio
+  .refine((value) => /^\d+$/.test(value), {
+    message: "La planta debe ser un número entero. No se permiten decimales."
+  })
+  .refine(
+    (value) => {
+      const numero = Number(value);
+
+      return Number.isSafeInteger(numero) && numero > 0;
+    },
+    {
+      message: "La planta debe ser un número entero mayor que 0."
+    }
+  )
+  .transform((value) => String(Number(value)));
 
 export const loginSchema = z.object({
   usuario: textoObligatorio,
@@ -54,7 +70,7 @@ export const variedadSchema = z.object({
 });
 
 export const plantaSchema = z.object({
-  numero: textoObligatorio
+  numero: numeroPlanta
 });
 
 export const combinacionSchema = z.object({

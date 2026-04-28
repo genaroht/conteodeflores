@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
 import { AppShell } from "@/components/layout/AppShell";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 type Lote = {
   id: string;
@@ -63,15 +64,9 @@ export default function DashboardPage() {
   const [page, setPage] = useState(1);
   const [cargando, setCargando] = useState(false);
 
-  async function cargarCombos(loteSeleccionado?: string) {
-    const lotesRes = await fetch("/api/lotes?pageSize=500", {
-      cache: "no-store"
-    });
-
-    const lotesData = await lotesRes.json();
-    setLotes(lotesData.items || []);
-
+  async function cargarSectores(loteSeleccionado?: string) {
     const query = new URLSearchParams();
+
     query.set("pageSize", "500");
 
     if (loteSeleccionado) {
@@ -83,7 +78,20 @@ export default function DashboardPage() {
     });
 
     const sectoresData = await sectoresRes.json();
+
     setSectores(sectoresData.items || []);
+  }
+
+  async function cargarCombos() {
+    const lotesRes = await fetch("/api/lotes?pageSize=500", {
+      cache: "no-store"
+    });
+
+    const lotesData = await lotesRes.json();
+
+    setLotes(lotesData.items || []);
+
+    await cargarSectores();
   }
 
   async function cargarDashboard(pagina = page) {
@@ -138,7 +146,7 @@ export default function DashboardPage() {
   async function cambiarLote(value: string) {
     setLoteId(value);
     setSectorId("");
-    await cargarCombos(value);
+    await cargarSectores(value);
   }
 
   return (
@@ -178,44 +186,33 @@ export default function DashboardPage() {
                 required
               />
 
-              <select
-                className="input-base"
+              <SearchableSelect
                 value={loteId}
-                onChange={(event) => cambiarLote(event.target.value)}
-              >
-                <option value="">Todos los lotes</option>
-                {lotes.map((lote) => (
-                  <option key={lote.id} value={lote.id}>
-                    {lote.nombre}
-                  </option>
-                ))}
-              </select>
+                onChange={cambiarLote}
+                options={lotes}
+                placeholder="Todos los lotes"
+                numericSort
+              />
 
-              <select
-                className="input-base"
+              <SearchableSelect
                 value={sectorId}
-                onChange={(event) => setSectorId(event.target.value)}
-              >
-                <option value="">Todos los sectores</option>
-                {sectores.map((sector) => (
-                  <option key={sector.id} value={sector.id}>
-                    {sector.nombre}
-                  </option>
-                ))}
-              </select>
+                onChange={setSectorId}
+                options={sectores}
+                placeholder="Todos los sectores"
+                numericSort
+                disabled={!loteId && sectores.length === 0}
+              />
 
-              <select
-                className="input-base"
+              <SearchableSelect
                 value={usuarioId}
-                onChange={(event) => setUsuarioId(event.target.value)}
-              >
-                <option value="">Todos los usuarios</option>
-                {usuariosFiltro.map((usuario) => (
-                  <option key={usuario.id} value={usuario.id}>
-                    {usuario.nombre || usuario.usuario}
-                  </option>
-                ))}
-              </select>
+                onChange={setUsuarioId}
+                options={usuariosFiltro.map((usuario) => ({
+                  id: usuario.id,
+                  nombre: usuario.nombre || usuario.usuario
+                }))}
+                placeholder="Todos los usuarios"
+                numericSort={false}
+              />
 
               <button
                 type="button"

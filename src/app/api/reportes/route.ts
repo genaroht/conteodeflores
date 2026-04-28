@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 
 import { puedeVerReportes } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -10,6 +11,70 @@ function crearFechaInicio(fecha: string) {
 
 function crearFechaFin(fecha: string) {
   return new Date(`${fecha}T23:59:59.999Z`);
+}
+
+function crearEvolucion(
+  items: Array<{
+    fc: number;
+    fa: number;
+    combinacion: {
+      fecha: Date;
+      semana: {
+        numero: number;
+        anio: number;
+      };
+    };
+  }>
+) {
+  const mapa = new Map<
+    string,
+    {
+      etiqueta: string;
+      anio: number;
+      semana: number;
+      fecha: string;
+      fc: number;
+      fa: number;
+      total: number;
+    }
+  >();
+
+  for (const item of items) {
+    const anio = item.combinacion.semana.anio;
+    const semana = item.combinacion.semana.numero;
+    const key = `${anio}-${semana}`;
+    const fecha = item.combinacion.fecha.toISOString();
+
+    const actual = mapa.get(key);
+
+    if (actual) {
+      actual.fc += item.fc;
+      actual.fa += item.fa;
+      actual.total += item.fc + item.fa;
+
+      if (fecha < actual.fecha) {
+        actual.fecha = fecha;
+      }
+    } else {
+      mapa.set(key, {
+        etiqueta: `Semana ${semana} - ${anio}`,
+        anio,
+        semana,
+        fecha,
+        fc: item.fc,
+        fa: item.fa,
+        total: item.fc + item.fa
+      });
+    }
+  }
+
+  return Array.from(mapa.values()).sort((a, b) => {
+    if (a.anio !== b.anio) {
+      return a.anio - b.anio;
+    }
+
+    return a.semana - b.semana;
+  });
 }
 
 export async function GET(request: Request) {
@@ -27,12 +92,12 @@ export async function GET(request: Request) {
     200
   );
 
-  const semana = searchParams.get("semana");
-  const fechaDesde = searchParams.get("fechaDesde");
-  const fechaHasta = searchParams.get("fechaHasta");
-  const loteId = searchParams.get("loteId");
-  const sectorId = searchParams.get("sectorId");
-  const variedadId = searchParams.get("variedadId");
+  const semana = searchParams.get("semana")?.trim() || "";
+  const fechaDesde = searchParams.get("fechaDesde")?.trim() || "";
+  const fechaHasta = searchParams.get("fechaHasta")?.trim() || "";
+  const loteId = searchParams.get("loteId") || "";
+  const sectorId = searchParams.get("sectorId") || "";
+  const variedadId = searchParams.get("variedadId") || "";
   const planta = searchParams.get("planta")?.trim() || "";
 
   const fechaFiltro: {
@@ -48,22 +113,25 @@ export async function GET(request: Request) {
     fechaFiltro.lte = crearFechaFin(fechaHasta);
   }
 
-  const where = {
+  const semanaNumero = /^\d+$/.test(semana) ? Number(semana) : undefined;
+
+  const where: Prisma.ConteoWhereInput = {
     ...(planta
       ? {
           planta: {
             numero: /^\d+$/.test(planta)
               ? {
                   equals: planta,
-                  mode: "insensitive" as const
+                  mode: "insensitive"
                 }
               : {
                   contains: planta,
-                  mode: "insensitive" as const
+                  mode: "insensitive"
                 }
           }
         }
       : {}),
+
     combinacion: {
       ...(loteId ? { loteId } : {}),
       ...(sectorId ? { sectorId } : {}),
@@ -73,18 +141,19 @@ export async function GET(request: Request) {
             fecha: fechaFiltro
           }
         : {}),
-      ...(semana
+      ...(semanaNumero
         ? {
             semana: {
-              numero: Number(semana)
+              numero: semanaNumero
             }
           }
         : {})
     }
   };
 
-  const [total, totals, items] = await Promise.all([
+  const [total, totals, items, itemsEvolucion] = await Promise.all([
     prisma.conteo.count({ where }),
+
     prisma.conteo.aggregate({
       where,
       _sum: {
@@ -92,6 +161,7 @@ export async function GET(request: Request) {
         fa: true
       }
     }),
+
     prisma.conteo.findMany({
       where,
       include: {
@@ -110,13 +180,32 @@ export async function GET(request: Request) {
       },
       skip: (page - 1) * pageSize,
       take: pageSize
+    }),
+
+    prisma.conteo.findMany({
+      where,
+      select: {
+        fc: true,
+        fa: true,
+        combinacion: {
+          select: {
+            fecha: true,
+            semana: {
+              select: {
+                numero: true,
+                anio: true
+              }
+            }
+          }
+        }
+      }
     })
   ]);
 
   const mapped = items.map((item) => ({
     id: item.id,
     semana: item.combinacion.semana.numero,
-    fecha: item.combinacion.fecha,
+    fecha: item.combinacion.fecha.toISOString(),
     lote: item.combinacion.lote.nombre,
     sector: item.combinacion.sector.nombre,
     variedad: item.combinacion.variedad.nombre,
@@ -126,6 +215,9 @@ export async function GET(request: Request) {
     total: item.fc + item.fa
   }));
 
+  const fc = totals._sum.fc || 0;
+  const fa = totals._sum.fa || 0;
+
   return NextResponse.json({
     items: mapped,
     page,
@@ -133,9 +225,10 @@ export async function GET(request: Request) {
     total,
     totalPages: Math.max(Math.ceil(total / pageSize), 1),
     resumen: {
-      fc: totals._sum.fc || 0,
-      fa: totals._sum.fa || 0,
-      total: (totals._sum.fc || 0) + (totals._sum.fa || 0)
-    }
+      fc,
+      fa,
+      total: fc + fa
+    },
+    evolucion: crearEvolucion(itemsEvolucion)
   });
 }

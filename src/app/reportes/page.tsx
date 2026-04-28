@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { EvolucionChart, type EvolucionItem } from "@/components/reportes/EvolucionChart";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 type Lote = {
   id: string;
@@ -44,6 +46,7 @@ type ReporteResponse = {
     fa: number;
     total: number;
   };
+  evolucion: EvolucionItem[];
 };
 
 export default function ReportesPage() {
@@ -62,16 +65,9 @@ export default function ReportesPage() {
   const [data, setData] = useState<ReporteResponse | null>(null);
   const [page, setPage] = useState(1);
 
-  async function cargarCombos(loteSeleccionado?: string) {
-    const [lotesRes, variedadesRes] = await Promise.all([
-      fetch("/api/lotes?pageSize=500", { cache: "no-store" }),
-      fetch("/api/variedades?pageSize=500", { cache: "no-store" })
-    ]);
-
-    setLotes((await lotesRes.json()).items || []);
-    setVariedades((await variedadesRes.json()).items || []);
-
+  async function cargarSectores(loteSeleccionado?: string) {
     const query = new URLSearchParams();
+
     query.set("pageSize", "500");
 
     if (loteSeleccionado) {
@@ -82,7 +78,24 @@ export default function ReportesPage() {
       cache: "no-store"
     });
 
-    setSectores((await sectoresRes.json()).items || []);
+    const sectoresData = await sectoresRes.json();
+
+    setSectores(sectoresData.items || []);
+  }
+
+  async function cargarCombos() {
+    const [lotesRes, variedadesRes] = await Promise.all([
+      fetch("/api/lotes?pageSize=500", { cache: "no-store" }),
+      fetch("/api/variedades?pageSize=500", { cache: "no-store" })
+    ]);
+
+    const lotesData = await lotesRes.json();
+    const variedadesData = await variedadesRes.json();
+
+    setLotes(lotesData.items || []);
+    setVariedades(variedadesData.items || []);
+
+    await cargarSectores();
   }
 
   async function cargarReportes(pagina = page) {
@@ -111,10 +124,12 @@ export default function ReportesPage() {
   useEffect(() => {
     cargarCombos();
     cargarReportes(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     cargarReportes(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
   async function buscar() {
@@ -125,7 +140,7 @@ export default function ReportesPage() {
   async function cambiarLote(value: string) {
     setLoteId(value);
     setSectorId("");
-    await cargarCombos(value);
+    await cargarSectores(value);
   }
 
   return (
@@ -135,12 +150,12 @@ export default function ReportesPage() {
           <h1 className="text-2xl font-black text-[#10231A]">Reportes</h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Filtra y revisa los registros de conteo.
+            Filtra según lote, sector, variedad y fechas.
           </p>
         </section>
 
         <section className="card-base">
-          <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-8">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-8">
             <input
               className="input-base"
               value={semana}
@@ -163,44 +178,30 @@ export default function ReportesPage() {
               type="date"
             />
 
-            <select
-              className="input-base"
+            <SearchableSelect
               value={loteId}
-              onChange={(event) => cambiarLote(event.target.value)}
-            >
-              <option value="">Lote</option>
-              {lotes.map((lote) => (
-                <option key={lote.id} value={lote.id}>
-                  {lote.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={cambiarLote}
+              options={lotes}
+              placeholder="Todos los lotes"
+              numericSort
+            />
 
-            <select
-              className="input-base"
+            <SearchableSelect
               value={sectorId}
-              onChange={(event) => setSectorId(event.target.value)}
-            >
-              <option value="">Sector</option>
-              {sectores.map((sector) => (
-                <option key={sector.id} value={sector.id}>
-                  {sector.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setSectorId}
+              options={sectores}
+              placeholder="Todos los sectores"
+              numericSort
+              disabled={!loteId && sectores.length === 0}
+            />
 
-            <select
-              className="input-base"
+            <SearchableSelect
               value={variedadId}
-              onChange={(event) => setVariedadId(event.target.value)}
-            >
-              <option value="">Variedad</option>
-              {variedades.map((variedad) => (
-                <option key={variedad.id} value={variedad.id}>
-                  {variedad.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setVariedadId}
+              options={variedades}
+              placeholder="Todas las variedades"
+              numericSort={false}
+            />
 
             <input
               className="input-base"
@@ -230,8 +231,16 @@ export default function ReportesPage() {
 
             <div className="card-base">
               <p className="text-sm font-bold text-[#0B7A3B]">Total</p>
-              <p className="mt-2 text-3xl font-black">{data.resumen.total}</p>
+              <p className="mt-2 text-3xl font-black">
+                {data.resumen.total}
+              </p>
             </div>
+          </section>
+        ) : null}
+
+        {data ? (
+          <section className="card-base">
+            <EvolucionChart data={data.evolucion || []} />
           </section>
         ) : null}
 
@@ -270,7 +279,10 @@ export default function ReportesPage() {
 
               {data?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-6 text-center text-slate-500">
+                  <td
+                    colSpan={9}
+                    className="px-4 py-6 text-center text-slate-500"
+                  >
                     No hay registros para mostrar.
                   </td>
                 </tr>

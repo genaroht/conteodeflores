@@ -21,6 +21,26 @@ function getParams(request: Request) {
   return { page, pageSize, q, buscarExacto };
 }
 
+function esNumero(value: string) {
+  return /^-?\d+(\.\d+)?$/.test(value.trim());
+}
+
+function ordenarPorNombre<T extends { nombre: string }>(items: T[]) {
+  return [...items].sort((a, b) => {
+    const nombreA = a.nombre.trim();
+    const nombreB = b.nombre.trim();
+
+    if (esNumero(nombreA) && esNumero(nombreB)) {
+      return Number(nombreA) - Number(nombreB);
+    }
+
+    return nombreA.localeCompare(nombreB, "es", {
+      numeric: true,
+      sensitivity: "base"
+    });
+  });
+}
+
 export async function GET(request: Request) {
   const session = await getSession();
 
@@ -44,17 +64,15 @@ export async function GET(request: Request) {
       }
     : {};
 
-  const [total, items] = await Promise.all([
+  const [total, itemsSinOrdenar] = await Promise.all([
     prisma.lote.count({ where }),
     prisma.lote.findMany({
-      where,
-      orderBy: {
-        nombre: "asc"
-      },
-      skip: (page - 1) * pageSize,
-      take: pageSize
+      where
     })
   ]);
+
+  const itemsOrdenados = ordenarPorNombre(itemsSinOrdenar);
+  const items = itemsOrdenados.slice((page - 1) * pageSize, page * pageSize);
 
   return NextResponse.json({
     items,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { calcularSemana } from "@/lib/semana";
 import { hoyInput } from "@/lib/utils";
 
@@ -33,8 +34,8 @@ export default function NuevaCombinacionPage() {
 
   async function cargarMaestros() {
     const [lotesRes, variedadesRes] = await Promise.all([
-      fetch("/api/lotes"),
-      fetch("/api/variedades")
+      fetch("/api/lotes?pageSize=500", { cache: "no-store" }),
+      fetch("/api/variedades?pageSize=500", { cache: "no-store" })
     ]);
 
     const lotesData = await lotesRes.json();
@@ -50,7 +51,10 @@ export default function NuevaCombinacionPage() {
       return;
     }
 
-    const response = await fetch(`/api/sectores?loteId=${id}`);
+    const response = await fetch(`/api/sectores?loteId=${id}&pageSize=500`, {
+      cache: "no-store"
+    });
+
     const data = await response.json();
 
     setSectores(data.items || []);
@@ -161,6 +165,7 @@ export default function NuevaCombinacionPage() {
     });
 
     const data = await response.json();
+
     setGuardando(false);
 
     if (!response.ok) {
@@ -213,18 +218,13 @@ export default function NuevaCombinacionPage() {
               </button>
             </div>
 
-            <select
-              className="input-base"
+            <SearchableSelect
               value={loteId}
-              onChange={(event) => setLoteId(event.target.value)}
-            >
-              <option value="">Seleccionar lote</option>
-              {lotes.map((lote) => (
-                <option key={lote.id} value={lote.id}>
-                  {lote.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setLoteId}
+              options={lotes}
+              placeholder="Seleccionar lote"
+              numericSort
+            />
           </div>
 
           <div>
@@ -241,18 +241,16 @@ export default function NuevaCombinacionPage() {
               </button>
             </div>
 
-            <select
-              className="input-base"
+            <SearchableSelect
               value={sectorId}
-              onChange={(event) => setSectorId(event.target.value)}
-            >
-              <option value="">Seleccionar sector</option>
-              {sectores.map((sector) => (
-                <option key={sector.id} value={sector.id}>
-                  {sector.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setSectorId}
+              options={sectores}
+              placeholder={
+                loteId ? "Seleccionar sector" : "Primero selecciona lote"
+              }
+              numericSort
+              disabled={!loteId}
+            />
           </div>
 
           <div>
@@ -269,18 +267,13 @@ export default function NuevaCombinacionPage() {
               </button>
             </div>
 
-            <select
-              className="input-base"
+            <SearchableSelect
               value={variedadId}
-              onChange={(event) => setVariedadId(event.target.value)}
-            >
-              <option value="">Seleccionar variedad</option>
-              {variedades.map((variedad) => (
-                <option key={variedad.id} value={variedad.id}>
-                  {variedad.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setVariedadId}
+              options={variedades}
+              placeholder="Seleccionar variedad"
+              numericSort={false}
+            />
           </div>
 
           <button

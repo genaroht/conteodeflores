@@ -30,6 +30,24 @@ function getParams(request: Request) {
   };
 }
 
+function esNumero(value: string) {
+  return /^-?\d+(\.\d+)?$/.test(value.trim());
+}
+
+function compararNombres(a: string, b: string) {
+  const nombreA = a.trim();
+  const nombreB = b.trim();
+
+  if (esNumero(nombreA) && esNumero(nombreB)) {
+    return Number(nombreA) - Number(nombreB);
+  }
+
+  return nombreA.localeCompare(nombreB, "es", {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
 export async function GET(request: Request) {
   const session = await getSession();
 
@@ -71,27 +89,27 @@ export async function GET(request: Request) {
       : {})
   };
 
-  const [total, items] = await Promise.all([
+  const [total, itemsSinOrdenar] = await Promise.all([
     prisma.sector.count({ where }),
     prisma.sector.findMany({
       where,
       include: {
         lote: true
-      },
-      orderBy: [
-        {
-          lote: {
-            nombre: "asc"
-          }
-        },
-        {
-          nombre: "asc"
-        }
-      ],
-      skip: (page - 1) * pageSize,
-      take: pageSize
+      }
     })
   ]);
+
+  const itemsOrdenados = [...itemsSinOrdenar].sort((a, b) => {
+    const loteCompare = compararNombres(a.lote.nombre, b.lote.nombre);
+
+    if (loteCompare !== 0) {
+      return loteCompare;
+    }
+
+    return compararNombres(a.nombre, b.nombre);
+  });
+
+  const items = itemsOrdenados.slice((page - 1) * pageSize, page * pageSize);
 
   return NextResponse.json({
     items,

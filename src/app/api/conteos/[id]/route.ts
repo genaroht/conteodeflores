@@ -36,12 +36,13 @@ const numeroEnteroSchema = z
   })
   .refine((value) => Number.isSafeInteger(value) && value >= 0, {
     message:
-      "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales."
+      "FC, FA y Cuaja deben ser números enteros mayores o iguales a 0. No se permiten decimales."
   });
 
 const conteoUpdateSchema = z.object({
   fc: numeroEnteroSchema,
-  fa: numeroEnteroSchema
+  fa: numeroEnteroSchema,
+  cuaja: numeroEnteroSchema
 });
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -107,7 +108,8 @@ export async function PATCH(request: Request, { params }: Params) {
     },
     data: {
       fc: parsed.data.fc,
-      fa: parsed.data.fa
+      fa: parsed.data.fa,
+      cuaja: parsed.data.cuaja
     },
     include: {
       planta: true

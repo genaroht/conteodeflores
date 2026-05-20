@@ -143,7 +143,7 @@ export default function ExcelPage() {
           <h1 className="text-2xl font-black text-[#10231A]">Excel</h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Descarga plantilla, importa registros, revisa historial y elimina cargas importadas.
+            Descarga la plantilla con Cuaja, importa registros, revisa historial y elimina cargas importadas.
           </p>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">

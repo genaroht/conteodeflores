@@ -5,6 +5,7 @@ type DashboardCardProps = {
   variedad: string;
   fc: number;
   fa: number;
+  cuaja?: number;
   registradoPor?: string;
 };
 
@@ -15,9 +16,10 @@ export function DashboardCard({
   variedad,
   fc,
   fa,
+  cuaja = 0,
   registradoPor
 }: DashboardCardProps) {
-  const total = fc + fa;
+  const total = fc + fa + cuaja;
 
   return (
     <article className="card-base">
@@ -47,7 +49,7 @@ export function DashboardCard({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-2xl bg-[#E8F5EE] p-3 text-center">
           <p className="text-xs font-bold text-[#0B7A3B]">FC</p>
           <p className="mt-1 text-2xl font-black text-[#10231A]">{fc}</p>
@@ -56,6 +58,11 @@ export function DashboardCard({
         <div className="rounded-2xl bg-[#E8F5EE] p-3 text-center">
           <p className="text-xs font-bold text-[#0B7A3B]">FA</p>
           <p className="mt-1 text-2xl font-black text-[#10231A]">{fa}</p>
+        </div>
+
+        <div className="rounded-2xl bg-[#E8F5EE] p-3 text-center">
+          <p className="text-xs font-bold text-[#0B7A3B]">Cuaja</p>
+          <p className="mt-1 text-2xl font-black text-[#10231A]">{cuaja}</p>
         </div>
 
         <div className="rounded-2xl bg-slate-100 p-3 text-center">

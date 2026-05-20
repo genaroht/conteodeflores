@@ -1,15 +1,14 @@
 import { crearWorkbookBase } from "@/lib/excel";
+import { crearFechaUtcMediodia, obtenerFechaInput } from "@/lib/fecha";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 
-function crearFechaInicio(fecha: string) {
-  return new Date(`${fecha}T00:00:00.000Z`);
-}
-
-function crearFechaFin(fecha: string) {
-  return new Date(`${fecha}T23:59:59.999Z`);
+function crearFechaSoloDia(fecha: string) {
+  // La columna Combinacion.fecha es DATE. Usamos mediodía UTC para conservar
+  // exactamente la fecha filtrada, sin depender de la zona horaria del servidor.
+  return crearFechaUtcMediodia(fecha);
 }
 
 export async function GET(request: Request) {
@@ -33,11 +32,11 @@ export async function GET(request: Request) {
   } = {};
 
   if (fechaDesde) {
-    fechaFiltro.gte = crearFechaInicio(fechaDesde);
+    fechaFiltro.gte = crearFechaSoloDia(fechaDesde);
   }
 
   if (fechaHasta) {
-    fechaFiltro.lte = crearFechaFin(fechaHasta);
+    fechaFiltro.lte = crearFechaSoloDia(fechaHasta);
   }
 
   const items = await prisma.conteo.findMany({
@@ -82,13 +81,14 @@ export async function GET(request: Request) {
 
   for (const item of items) {
     worksheet.addRow([
-      item.combinacion.semana.numero,
+      obtenerFechaInput(item.combinacion.fecha),
       item.combinacion.lote.nombre,
       item.combinacion.sector.nombre,
       item.combinacion.variedad.nombre,
       item.planta.numero,
       item.fc,
-      item.fa
+      item.fa,
+      item.cuaja
     ]);
   }
 

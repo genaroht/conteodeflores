@@ -32,6 +32,7 @@ type DashboardItem = {
   variedad: string;
   fc: number;
   fa: number;
+  cuaja: number;
   registradoPor: string;
 };
 
@@ -248,6 +249,7 @@ export default function DashboardPage() {
               variedad={item.variedad}
               fc={item.fc}
               fa={item.fa}
+              cuaja={item.cuaja}
               registradoPor={item.registradoPor}
             />
           ))}

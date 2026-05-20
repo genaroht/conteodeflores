@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { puedeModificarRegistro } from "@/lib/permissions";
+import { crearFechaUtcMediodia, obtenerFechaInput } from "@/lib/fecha";
 import { calcularSemana } from "@/lib/semana";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
@@ -45,7 +46,12 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ message: "No encontrado." }, { status: 404 });
   }
 
-  return NextResponse.json({ item });
+  return NextResponse.json({
+    item: {
+      ...item,
+      fecha: obtenerFechaInput(item.fecha)
+    }
+  });
 }
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -109,12 +115,14 @@ export async function PATCH(request: Request, { params }: Params) {
     }
   });
 
+  const fechaCombinacion = crearFechaUtcMediodia(parsed.data.fecha);
+
   const duplicado = await prisma.combinacion.findFirst({
     where: {
       id: {
         not: id
       },
-      semanaId: semana.id,
+      fecha: fechaCombinacion,
       loteId: parsed.data.loteId,
       sectorId: parsed.data.sectorId,
       variedadId: parsed.data.variedadId
@@ -125,7 +133,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json(
       {
         message:
-          "Ya existe una combinación con la misma semana, lote, sector y variedad."
+          "Ya existe una combinación con la misma fecha, lote, sector y variedad."
       },
       { status: 400 }
     );
@@ -134,7 +142,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const item = await prisma.combinacion.update({
     where: { id },
     data: {
-      fecha: new Date(`${parsed.data.fecha}T12:00:00.000Z`),
+      fecha: fechaCombinacion,
       semanaId: semana.id,
       loteId: parsed.data.loteId,
       sectorId: parsed.data.sectorId,
@@ -142,7 +150,12 @@ export async function PATCH(request: Request, { params }: Params) {
     }
   });
 
-  return NextResponse.json({ item });
+  return NextResponse.json({
+    item: {
+      ...item,
+      fecha: obtenerFechaInput(item.fecha)
+    }
+  });
 }
 
 export async function DELETE(_request: Request, { params }: Params) {

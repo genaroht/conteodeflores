@@ -7,22 +7,25 @@ import {
   normalizarEncabezadoExcel,
   obtenerTextoCelda
 } from "@/lib/excel";
-import { obtenerRangoSemana } from "@/lib/semana";
+import { obtenerFechaInput } from "@/lib/fecha";
+import { calcularSemana, obtenerRangoSemana } from "@/lib/semana";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { convertirVacioACero, normalizarTexto } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
-const HEADERS_REQUERIDOS = [
-  "SEMANA",
+const HEADERS_BASE = [
   "LOTE",
   "SECTOR",
   "VARIEDAD",
   "N° DE PLANTAS",
   "FC",
-  "FA"
+  "FA",
+  "CUAJA"
 ];
+
+const HEADERS_FECHA = ["FECHA", "SEMANA"];
 
 type ResumenImportacion = {
   filasProcesadas: number;
@@ -37,13 +40,16 @@ type ResumenImportacion = {
 
 type FilaExcel = {
   rowNumber: number;
+  anio: number;
   semana: number;
+  fecha: Date;
   lote: string;
   sector: string;
   variedad: string;
   planta: string;
   fc: number;
   fa: number;
+  cuaja: number;
 };
 
 function headerCompatible(valor: string, requerido: string) {
@@ -59,6 +65,142 @@ function headerCompatible(valor: string, requerido: string) {
   }
 
   return limpio === req;
+}
+
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+function crearFechaUTCValida(anio: number, mes: number, dia: number) {
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia, 12, 0, 0));
+
+  if (
+    fecha.getUTCFullYear() !== anio ||
+    fecha.getUTCMonth() !== mes - 1 ||
+    fecha.getUTCDate() !== dia
+  ) {
+    return null;
+  }
+
+  return fecha;
+}
+
+function fechaDesdeSerialExcel(serial: number) {
+  if (!Number.isFinite(serial) || serial <= 0) {
+    return null;
+  }
+
+  const dias = Math.floor(serial);
+
+  // Excel usa un serial de días desde 1899-12-30 para representar fechas.
+  const fecha = new Date(Date.UTC(1899, 11, 30 + dias, 12, 0, 0));
+
+  return crearFechaUTCValida(
+    fecha.getUTCFullYear(),
+    fecha.getUTCMonth() + 1,
+    fecha.getUTCDate()
+  );
+}
+
+function parsearFechaTextoExcel(textoEntrada: string) {
+  const texto = textoEntrada.trim();
+
+  if (!texto) {
+    return null;
+  }
+
+  const textoNormalizado = texto.replace(/\./g, "/").replace(/-/g, "/");
+
+  const ymd = textoNormalizado.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+
+  if (ymd) {
+    return crearFechaUTCValida(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]));
+  }
+
+  const dmyOmdy = textoNormalizado.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+
+  if (dmyOmdy) {
+    const parte1 = Number(dmyOmdy[1]);
+    const parte2 = Number(dmyOmdy[2]);
+    const anio = Number(dmyOmdy[3]);
+
+    // En Perú lo normal es DD/MM/YYYY. Si la segunda parte es mayor a 12,
+    // interpretamos como MM/DD/YYYY para soportar archivos exportados en inglés.
+    const dia = parte2 > 12 && parte1 <= 12 ? parte2 : parte1;
+    const mes = parte2 > 12 && parte1 <= 12 ? parte1 : parte2;
+
+    return crearFechaUTCValida(anio, mes, dia);
+  }
+
+  const yyyymmdd = texto.match(/^(\d{4})(\d{2})(\d{2})$/);
+
+  if (yyyymmdd) {
+    return crearFechaUTCValida(
+      Number(yyyymmdd[1]),
+      Number(yyyymmdd[2]),
+      Number(yyyymmdd[3])
+    );
+  }
+
+  const serial = Number(texto.replace(",", "."));
+
+  if (Number.isFinite(serial) && serial >= 1 && serial <= 80000) {
+    return fechaDesdeSerialExcel(serial);
+  }
+
+  return null;
+}
+
+function obtenerFechaExcel(valor: ExcelJS.CellValue): Date | null {
+  if (valor === null || valor === undefined) {
+    return null;
+  }
+
+  if (valor instanceof Date) {
+    // ExcelJS entrega las fechas como objetos Date. En zonas horarias como Perú,
+    // usar getFullYear/getMonth/getDate puede mover la fecha un día hacia atrás
+    // cuando el valor viene a medianoche UTC. Por eso siempre leemos el día UTC.
+    return crearFechaUTCValida(
+      valor.getUTCFullYear(),
+      valor.getUTCMonth() + 1,
+      valor.getUTCDate()
+    );
+  }
+
+  if (typeof valor === "number") {
+    return fechaDesdeSerialExcel(valor);
+  }
+
+  if (typeof valor === "string") {
+    return parsearFechaTextoExcel(valor);
+  }
+
+  if (typeof valor === "object") {
+    const valorObjeto = valor as {
+      result?: ExcelJS.CellValue;
+      text?: string;
+      richText?: Array<{ text: string }>;
+    };
+
+    if (valorObjeto.result !== undefined) {
+      return obtenerFechaExcel(valorObjeto.result);
+    }
+
+    if (valorObjeto.text) {
+      return parsearFechaTextoExcel(valorObjeto.text);
+    }
+
+    if (Array.isArray(valorObjeto.richText)) {
+      return parsearFechaTextoExcel(
+        valorObjeto.richText.map((item) => item.text).join("")
+      );
+    }
+  }
+
+  return parsearFechaTextoExcel(obtenerTextoCelda(valor));
+}
+
+function crearClaveFecha(fecha: Date) {
+  return obtenerFechaInput(fecha);
 }
 
 async function registrarImportacionError(params: {
@@ -154,14 +296,16 @@ await workbook.xlsx.load(excelBuffer);
     row.eachCell((cell, colNumber) => {
       const valor = normalizarEncabezadoExcel(obtenerTextoCelda(cell.value));
 
-      for (const requerido of HEADERS_REQUERIDOS) {
+      for (const requerido of [...HEADERS_FECHA, ...HEADERS_BASE]) {
         if (headerCompatible(valor, requerido)) {
           encontrados[requerido] = colNumber;
         }
       }
     });
 
-    const completo = HEADERS_REQUERIDOS.every((header) => encontrados[header]);
+    const completo =
+      HEADERS_BASE.every((header) => encontrados[header]) &&
+      HEADERS_FECHA.some((header) => encontrados[header]);
 
     if (completo) {
       headerRowNumber = rowNumber;
@@ -171,7 +315,7 @@ await workbook.xlsx.load(excelBuffer);
 
   if (!headerRowNumber) {
     resumen.errores.push(
-      "No se encontraron los encabezados requeridos: semana, LOTE, SECTOR, VARIEDAD, N° DE PLANTAS, FC, FA."
+      "No se encontraron los encabezados requeridos: FECHA o SEMANA, LOTE, SECTOR, VARIEDAD, N° DE PLANTAS, FC, FA, CUAJA."
     );
     resumen.filasConError = 1;
 
@@ -200,9 +344,13 @@ await workbook.xlsx.load(excelBuffer);
   ) {
     const row = worksheet.getRow(rowNumber);
 
-    const semanaValor = obtenerTextoCelda(
-      row.getCell(columnas["SEMANA"]).value
-    );
+    const fechaCelda = columnas["FECHA"]
+      ? row.getCell(columnas["FECHA"]).value
+      : null;
+    const fechaValor = fechaCelda ? obtenerTextoCelda(fechaCelda) : "";
+    const semanaValor = columnas["SEMANA"]
+      ? obtenerTextoCelda(row.getCell(columnas["SEMANA"]).value)
+      : "";
     const loteValor = obtenerTextoCelda(row.getCell(columnas["LOTE"]).value);
     const sectorValor = obtenerTextoCelda(
       row.getCell(columnas["SECTOR"]).value
@@ -215,31 +363,78 @@ await workbook.xlsx.load(excelBuffer);
     );
     const fcValor = obtenerTextoCelda(row.getCell(columnas["FC"]).value);
     const faValor = obtenerTextoCelda(row.getCell(columnas["FA"]).value);
+    const cuajaValor = obtenerTextoCelda(row.getCell(columnas["CUAJA"]).value);
 
     const filaVacia = [
+      fechaValor,
       semanaValor,
       loteValor,
       sectorValor,
       variedadValor,
       plantaValor,
       fcValor,
-      faValor
+      faValor,
+      cuajaValor
     ].every((valor) => !String(valor).trim());
 
     if (filaVacia) {
       continue;
     }
 
+    const tieneIdentificacionConteo = [
+      fechaValor,
+      semanaValor,
+      loteValor,
+      sectorValor,
+      variedadValor
+    ].some((valor) => String(valor).trim());
+
+    const tieneSoloValoresSueltos = [
+      plantaValor,
+      fcValor,
+      faValor,
+      cuajaValor
+    ].some((valor) => String(valor).trim());
+
+    // ExcelJS considera como parte del archivo las filas con residuos en cualquier celda.
+    // Si una fila no tiene FECHA/SEMANA, LOTE, SECTOR ni VARIEDAD, no puede formar
+    // una combinación válida; se omite para evitar errores por filas sobrantes al final
+    // de la plantilla, por ejemplo valores quedados en N° DE PLANTAS, FC, FA o CUAJA.
+    if (!tieneIdentificacionConteo && tieneSoloValoresSueltos) {
+      continue;
+    }
+
     resumen.filasProcesadas += 1;
 
-    const numeroSemana = extraerNumeroSemana(semanaValor);
+    let anio = new Date().getFullYear();
+    let numeroSemana = extraerNumeroSemana(semanaValor);
+    let fechaRegistro: Date | null = null;
+
+    if (columnas["FECHA"] && fechaValor.trim()) {
+      fechaRegistro = obtenerFechaExcel(fechaCelda);
+
+      if (!fechaRegistro) {
+        resumen.errores.push(
+          `Fila ${rowNumber}: fecha inválida. Usa una fecha real de Excel, YYYY-MM-DD o DD/MM/YYYY.`
+        );
+        continue;
+      }
+
+      const semanaCalculada = calcularSemana(fechaRegistro);
+      anio = semanaCalculada.anio;
+      numeroSemana = semanaCalculada.numero;
+    } else if (numeroSemana) {
+      const rango = obtenerRangoSemana(anio, numeroSemana);
+      fechaRegistro = rango.fechaInicio;
+    }
+
     const loteNombre = normalizarTexto(loteValor);
     const sectorNombre = normalizarTexto(sectorValor);
     const variedadNombre = normalizarTexto(variedadValor);
     const plantaNumero = plantaValor.trim();
 
-    if (!numeroSemana) {
-      resumen.errores.push(`Fila ${rowNumber}: semana inválida.`);
+    if (!numeroSemana || !fechaRegistro) {
+      resumen.errores.push(`Fila ${rowNumber}: fecha o semana inválida.`);
       continue;
     }
 
@@ -251,7 +446,7 @@ await workbook.xlsx.load(excelBuffer);
     }
 
     const clave = [
-      numeroSemana,
+      crearClaveFecha(fechaRegistro),
       loteNombre,
       sectorNombre,
       variedadNombre,
@@ -262,7 +457,7 @@ await workbook.xlsx.load(excelBuffer);
 
     if (filaAnterior) {
       resumen.errores.push(
-        `Fila ${rowNumber}: conteo duplicado en el Excel. Ya existe la misma semana, lote, sector, variedad y planta en la fila ${filaAnterior}.`
+        `Fila ${rowNumber}: conteo duplicado en el Excel. Ya existe la misma fecha, lote, sector, variedad y planta en la fila ${filaAnterior}.`
       );
       continue;
     }
@@ -271,13 +466,16 @@ await workbook.xlsx.load(excelBuffer);
 
     filas.push({
       rowNumber,
+      anio,
       semana: numeroSemana,
+      fecha: fechaRegistro,
       lote: loteNombre,
       sector: sectorNombre,
       variedad: variedadNombre,
       planta: plantaNumero,
       fc: convertirVacioACero(fcValor),
-      fa: convertirVacioACero(faValor)
+      fa: convertirVacioACero(faValor),
+      cuaja: convertirVacioACero(cuajaValor)
     });
   }
 
@@ -333,7 +531,7 @@ await workbook.xlsx.load(excelBuffer);
           }
         });
 
-        const semanaCache = new Map<number, { id: string }>();
+        const semanaCache = new Map<string, { id: string }>();
         const loteCache = new Map<string, { id: string }>();
         const sectorCache = new Map<string, { id: string }>();
         const variedadCache = new Map<string, { id: string }>();
@@ -347,6 +545,7 @@ await workbook.xlsx.load(excelBuffer);
           plantaId: string;
           fc: number;
           fa: number;
+          cuaja: number;
           createdById: string;
           importacionId: string;
         }> = [];
@@ -359,10 +558,11 @@ await workbook.xlsx.load(excelBuffer);
         };
 
         for (const fila of filas) {
-          let semana = semanaCache.get(fila.semana);
+          const semanaKey = `${fila.anio}|${fila.semana}`;
+          let semana = semanaCache.get(semanaKey);
 
           if (!semana) {
-            const rango = obtenerRangoSemana(new Date().getFullYear(), fila.semana);
+            const rango = obtenerRangoSemana(fila.anio, fila.semana);
 
             semana = await tx.semana.upsert({
               where: {
@@ -386,7 +586,7 @@ await workbook.xlsx.load(excelBuffer);
               }
             });
 
-            semanaCache.set(fila.semana, semana);
+            semanaCache.set(semanaKey, semana);
           }
 
           let lote = loteCache.get(fila.lote);
@@ -514,14 +714,14 @@ await workbook.xlsx.load(excelBuffer);
             plantaCache.set(fila.planta, planta);
           }
 
-          const combinacionKey = `${semana.id}|${lote.id}|${sector.id}|${variedad.id}`;
+          const combinacionKey = `${crearClaveFecha(fila.fecha)}|${lote.id}|${sector.id}|${variedad.id}`;
           let combinacion = combinacionCache.get(combinacionKey);
 
           if (!combinacion) {
             const existente = await tx.combinacion.findUnique({
               where: {
-                semanaId_loteId_sectorId_variedadId: {
-                  semanaId: semana.id,
+                fecha_loteId_sectorId_variedadId: {
+                  fecha: fila.fecha,
                   loteId: lote.id,
                   sectorId: sector.id,
                   variedadId: variedad.id
@@ -535,14 +735,9 @@ await workbook.xlsx.load(excelBuffer);
             if (existente) {
               combinacion = existente;
             } else {
-              const rango = obtenerRangoSemana(
-                new Date().getFullYear(),
-                fila.semana
-              );
-
               combinacion = await tx.combinacion.create({
                 data: {
-                  fecha: rango.fechaInicio,
+                  fecha: fila.fecha,
                   semanaId: semana.id,
                   loteId: lote.id,
                   sectorId: sector.id,
@@ -573,7 +768,7 @@ await workbook.xlsx.load(excelBuffer);
 
           if (conteoExistente) {
             erroresDuplicados.push(
-              `Fila ${fila.rowNumber}: ya existe un conteo para la misma semana, lote, sector, variedad y planta. Corrige el Excel o edita el registro existente.`
+              `Fila ${fila.rowNumber}: ya existe un conteo para la misma fecha, lote, sector, variedad y planta. Corrige el Excel o edita el registro existente.`
             );
             continue;
           }
@@ -583,6 +778,7 @@ await workbook.xlsx.load(excelBuffer);
             plantaId: planta.id,
             fc: fila.fc,
             fa: fila.fa,
+            cuaja: fila.cuaja,
             createdById: session.id,
             importacionId: importacion.id
           });

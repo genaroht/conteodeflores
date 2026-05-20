@@ -7,6 +7,7 @@ import { Plus, Search, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/ToastProvider";
+import { formatearFechaEsPe } from "@/lib/fecha";
 
 type Combinacion = {
   id: string;
@@ -28,10 +29,6 @@ type Combinacion = {
     conteos: number;
   };
 };
-
-function formatoFecha(fecha: string) {
-  return new Date(fecha).toLocaleDateString("es-PE");
-}
 
 export default function CombinacionesPage() {
   const toast = useToast();
@@ -215,7 +212,7 @@ export default function CombinacionesPage() {
                     </td>
 
                     <td className="hidden px-2 py-3 sm:table-cell sm:px-4">
-                      {formatoFecha(item.fecha)}
+                      {formatearFechaEsPe(item.fecha)}
                     </td>
 
                     <td className="px-2 py-3 sm:px-4">{item.lote.nombre}</td>

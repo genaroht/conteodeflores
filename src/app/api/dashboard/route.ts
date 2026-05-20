@@ -15,6 +15,7 @@ type DashboardItem = {
   registradoPor: string;
   fc: number;
   fa: number;
+  cuaja: number;
 };
 
 function numeroFiltro(value: string | null, fallback: number) {
@@ -77,7 +78,8 @@ export async function GET(request: Request) {
       where,
       _sum: {
         fc: true,
-        fa: true
+        fa: true,
+        cuaja: true
       }
     }),
     prisma.usuario.findMany({
@@ -186,7 +188,8 @@ export async function GET(request: Request) {
         variedad: combinacion.variedad.nombre,
         registradoPor,
         fc: grupo._sum.fc || 0,
-        fa: grupo._sum.fa || 0
+        fa: grupo._sum.fa || 0,
+        cuaja: grupo._sum.cuaja || 0
       };
     })
     .filter((item): item is DashboardItem => Boolean(item))

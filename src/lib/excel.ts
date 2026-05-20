@@ -1,13 +1,14 @@
 import ExcelJS from "exceljs";
 
 export const EXCEL_HEADERS = [
-  "semana",
+  "FECHA",
   "LOTE",
   "SECTOR",
   "VARIEDAD",
   "N° DE PLANTAS",
   "FC",
-  "FA"
+  "FA",
+  "CUAJA"
 ];
 
 export function normalizarEncabezadoExcel(valor: unknown): string {
@@ -90,6 +91,7 @@ export function crearWorkbookBase(nombreHoja: string) {
     { width: 16 },
     { width: 22 },
     { width: 18 },
+    { width: 12 },
     { width: 12 },
     { width: 12 }
   ];

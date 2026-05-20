@@ -1,22 +1,30 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 
+import { crearFechaUtcMediodia, obtenerFechaInput } from "@/lib/fecha";
 import { puedeVerReportes } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
-function crearFechaInicio(fecha: string) {
-  return new Date(`${fecha}T00:00:00.000Z`);
+function crearFechaSoloDia(fecha: string) {
+  // La columna Combinacion.fecha es DATE. Usar T00/T23 puede desfazar el día
+  // según la zona horaria de Node/PostgreSQL. Mediodía UTC conserva el día real.
+  return crearFechaUtcMediodia(fecha);
 }
 
-function crearFechaFin(fecha: string) {
-  return new Date(`${fecha}T23:59:59.999Z`);
+function calcularPromedio(total: number, plantas: number) {
+  if (plantas <= 0) {
+    return 0;
+  }
+
+  return Math.round((total / plantas) * 100) / 100;
 }
 
 function crearEvolucion(
   items: Array<{
     fc: number;
     fa: number;
+    cuaja: number;
     combinacion: {
       fecha: Date;
       semana: {
@@ -33,8 +41,10 @@ function crearEvolucion(
       anio: number;
       semana: number;
       fecha: string;
+      plantas: number;
       fc: number;
       fa: number;
+      cuaja: number;
       total: number;
     }
   >();
@@ -43,14 +53,16 @@ function crearEvolucion(
     const anio = item.combinacion.semana.anio;
     const semana = item.combinacion.semana.numero;
     const key = `${anio}-${semana}`;
-    const fecha = item.combinacion.fecha.toISOString();
+    const fecha = obtenerFechaInput(item.combinacion.fecha);
 
     const actual = mapa.get(key);
 
     if (actual) {
+      actual.plantas += 1;
       actual.fc += item.fc;
       actual.fa += item.fa;
-      actual.total += item.fc + item.fa;
+      actual.cuaja += item.cuaja;
+      actual.total += item.fc + item.fa + item.cuaja;
 
       if (fecha < actual.fecha) {
         actual.fecha = fecha;
@@ -61,20 +73,29 @@ function crearEvolucion(
         anio,
         semana,
         fecha,
+        plantas: 1,
         fc: item.fc,
         fa: item.fa,
-        total: item.fc + item.fa
+        cuaja: item.cuaja,
+        total: item.fc + item.fa + item.cuaja
       });
     }
   }
 
-  return Array.from(mapa.values()).sort((a, b) => {
-    if (a.anio !== b.anio) {
-      return a.anio - b.anio;
-    }
+  return Array.from(mapa.values())
+    .sort((a, b) => {
+      if (a.anio !== b.anio) {
+        return a.anio - b.anio;
+      }
 
-    return a.semana - b.semana;
-  });
+      return a.semana - b.semana;
+    })
+    .map((item) => ({
+      ...item,
+      promedioFc: calcularPromedio(item.fc, item.plantas),
+      promedioFa: calcularPromedio(item.fa, item.plantas),
+      promedioCuaja: calcularPromedio(item.cuaja, item.plantas)
+    }));
 }
 
 export async function GET(request: Request) {
@@ -96,9 +117,7 @@ export async function GET(request: Request) {
   const fechaDesde = searchParams.get("fechaDesde")?.trim() || "";
   const fechaHasta = searchParams.get("fechaHasta")?.trim() || "";
   const loteId = searchParams.get("loteId") || "";
-  const sectorId = searchParams.get("sectorId") || "";
   const variedadId = searchParams.get("variedadId") || "";
-  const planta = searchParams.get("planta")?.trim() || "";
 
   const fechaFiltro: {
     gte?: Date;
@@ -106,35 +125,18 @@ export async function GET(request: Request) {
   } = {};
 
   if (fechaDesde) {
-    fechaFiltro.gte = crearFechaInicio(fechaDesde);
+    fechaFiltro.gte = crearFechaSoloDia(fechaDesde);
   }
 
   if (fechaHasta) {
-    fechaFiltro.lte = crearFechaFin(fechaHasta);
+    fechaFiltro.lte = crearFechaSoloDia(fechaHasta);
   }
 
   const semanaNumero = /^\d+$/.test(semana) ? Number(semana) : undefined;
 
   const where: Prisma.ConteoWhereInput = {
-    ...(planta
-      ? {
-          planta: {
-            numero: /^\d+$/.test(planta)
-              ? {
-                  equals: planta,
-                  mode: "insensitive"
-                }
-              : {
-                  contains: planta,
-                  mode: "insensitive"
-                }
-          }
-        }
-      : {}),
-
     combinacion: {
       ...(loteId ? { loteId } : {}),
-      ...(sectorId ? { sectorId } : {}),
       ...(variedadId ? { variedadId } : {}),
       ...(Object.keys(fechaFiltro).length > 0
         ? {
@@ -158,7 +160,8 @@ export async function GET(request: Request) {
       where,
       _sum: {
         fc: true,
-        fa: true
+        fa: true,
+        cuaja: true
       }
     }),
 
@@ -187,6 +190,7 @@ export async function GET(request: Request) {
       select: {
         fc: true,
         fa: true,
+        cuaja: true,
         combinacion: {
           select: {
             fecha: true,
@@ -205,18 +209,20 @@ export async function GET(request: Request) {
   const mapped = items.map((item) => ({
     id: item.id,
     semana: item.combinacion.semana.numero,
-    fecha: item.combinacion.fecha.toISOString(),
+    fecha: obtenerFechaInput(item.combinacion.fecha),
     lote: item.combinacion.lote.nombre,
     sector: item.combinacion.sector.nombre,
     variedad: item.combinacion.variedad.nombre,
     planta: item.planta.numero,
     fc: item.fc,
     fa: item.fa,
-    total: item.fc + item.fa
+    cuaja: item.cuaja,
+    total: item.fc + item.fa + item.cuaja
   }));
 
   const fc = totals._sum.fc || 0;
   const fa = totals._sum.fa || 0;
+  const cuaja = totals._sum.cuaja || 0;
 
   return NextResponse.json({
     items: mapped,
@@ -227,7 +233,8 @@ export async function GET(request: Request) {
     resumen: {
       fc,
       fa,
-      total: fc + fa
+      cuaja,
+      total: fc + fa + cuaja
     },
     evolucion: crearEvolucion(itemsEvolucion)
   });

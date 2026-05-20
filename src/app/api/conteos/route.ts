@@ -45,7 +45,7 @@ const numeroEnteroSchema = z
   })
   .refine((value) => Number.isSafeInteger(value) && value >= 0, {
     message:
-      "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales."
+      "FC, FA y Cuaja deben ser números enteros mayores o iguales a 0. No se permiten decimales."
   });
 
 const conteosSchema = z.object({
@@ -55,7 +55,8 @@ const conteosSchema = z.object({
       z.object({
         plantaNumero: numeroPlantaSchema,
         fc: numeroEnteroSchema,
-        fa: numeroEnteroSchema
+        fa: numeroEnteroSchema,
+        cuaja: numeroEnteroSchema
       })
     )
     .min(1, "Debes registrar al menos una fila.")
@@ -274,6 +275,7 @@ export async function POST(request: Request) {
             plantaId: planta.id,
             fc: fila.fc,
             fa: fila.fa,
+            cuaja: fila.cuaja,
             createdById: session.id
           },
           include: {

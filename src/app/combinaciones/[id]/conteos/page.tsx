@@ -16,11 +16,13 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/ToastProvider";
+import { formatearFechaEsPe } from "@/lib/fecha";
 
 type ConteoGuardado = {
   id: string;
   fc: number;
   fa: number;
+  cuaja: number;
   planta: {
     id: string;
     numero: string;
@@ -51,6 +53,7 @@ type FilaConteo = {
   plantaNumero: string;
   fc: string;
   fa: string;
+  cuaja: string;
 };
 
 function crearIdTemporal() {
@@ -107,10 +110,6 @@ function numeroSeguro(value: string) {
   return Number(limpio);
 }
 
-function formatoFecha(fecha: string) {
-  return new Date(fecha).toLocaleDateString("es-PE");
-}
-
 export default function ConteosPage() {
   const params = useParams();
   const toast = useToast();
@@ -159,7 +158,8 @@ export default function ConteosPage() {
       id: crearIdTemporal(),
       plantaNumero: obtenerSiguientePlanta(filasActuales),
       fc: "",
-      fa: ""
+      fa: "",
+      cuaja: ""
     };
   }
 
@@ -243,11 +243,14 @@ export default function ConteosPage() {
     }
 
     const conteosInvalidos = filas.some(
-      (fila) => !esEnteroNoNegativo(fila.fc) || !esEnteroNoNegativo(fila.fa)
+      (fila) =>
+        !esEnteroNoNegativo(fila.fc) ||
+        !esEnteroNoNegativo(fila.fa) ||
+        !esEnteroNoNegativo(fila.cuaja)
     );
 
     if (conteosInvalidos) {
-      return "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales.";
+      return "FC, FA y Cuaja deben ser números enteros mayores o iguales a 0. No se permiten decimales.";
     }
 
     const plantas = plantasOriginales.map((planta) =>
@@ -307,7 +310,8 @@ export default function ConteosPage() {
         filas: filas.map((fila) => ({
           plantaNumero: normalizarEntero(fila.plantaNumero),
           fc: fila.fc === "" ? 0 : numeroSeguro(fila.fc),
-          fa: fila.fa === "" ? 0 : numeroSeguro(fila.fa)
+          fa: fila.fa === "" ? 0 : numeroSeguro(fila.fa),
+          cuaja: fila.cuaja === "" ? 0 : numeroSeguro(fila.cuaja)
         }))
       })
     });
@@ -331,7 +335,8 @@ export default function ConteosPage() {
         id: crearIdTemporal(),
         plantaNumero: obtenerSiguientePlanta([], conteosActualizados),
         fc: "",
-        fa: ""
+        fa: "",
+        cuaja: ""
       }
     ]);
   }
@@ -381,7 +386,7 @@ export default function ConteosPage() {
 
               <p className="mt-1 text-sm font-semibold text-slate-500">
                 Variedad: {combinacion?.variedad.nombre || "-"} | Fecha:{" "}
-                {combinacion ? formatoFecha(combinacion.fecha) : "-"}
+                {combinacion ? formatearFechaEsPe(combinacion.fecha) : "-"}
               </p>
             </div>
 
@@ -407,13 +412,14 @@ export default function ConteosPage() {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-[#DDE7E1]">
-            <table className="w-full min-w-[410px] table-fixed text-left text-xs sm:text-sm">
+            <table className="w-full min-w-[520px] table-fixed text-left text-xs sm:text-sm">
               <thead className="bg-[#E8F5EE] text-[#0B7A3B]">
                 <tr>
-                  <th className="w-[28%] px-2 py-3 sm:px-4">Planta</th>
-                  <th className="w-[26%] px-2 py-3 sm:px-4">FC</th>
-                  <th className="w-[26%] px-2 py-3 sm:px-4">FA</th>
-                  <th className="w-[20%] px-2 py-3 sm:px-4">Acciones</th>
+                  <th className="w-[24%] px-2 py-3 sm:px-4">Planta</th>
+                  <th className="w-[20%] px-2 py-3 sm:px-4">FC</th>
+                  <th className="w-[20%] px-2 py-3 sm:px-4">FA</th>
+                  <th className="w-[20%] px-2 py-3 sm:px-4">Cuaja</th>
+                  <th className="w-[16%] px-2 py-3 sm:px-4">Acciones</th>
                 </tr>
               </thead>
 
@@ -460,6 +466,20 @@ export default function ConteosPage() {
                         value={fila.fa}
                         onChange={(event) =>
                           actualizarFila(fila.id, "fa", event.target.value)
+                        }
+                        placeholder="0"
+                      />
+                    </td>
+
+                    <td className="px-2 py-3 sm:px-4">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className="input-base h-10 !px-2 sm:h-12 sm:!px-4"
+                        value={fila.cuaja}
+                        onChange={(event) =>
+                          actualizarFila(fila.id, "cuaja", event.target.value)
                         }
                         placeholder="0"
                       />
@@ -598,14 +618,15 @@ function ConteosGuardados({
   return (
     <div className="mt-4 space-y-4">
       <div className="overflow-x-auto rounded-2xl border border-[#DDE7E1]">
-        <table className="w-full min-w-[460px] table-fixed text-left text-xs sm:text-sm">
+        <table className="w-full min-w-[580px] table-fixed text-left text-xs sm:text-sm">
           <thead className="bg-[#E8F5EE] text-[#0B7A3B]">
             <tr>
-              <th className="w-[18%] px-2 py-3 sm:px-4">Planta</th>
-              <th className="w-[18%] px-2 py-3 sm:px-4">FC</th>
-              <th className="w-[18%] px-2 py-3 sm:px-4">FA</th>
-              <th className="w-[18%] px-2 py-3 sm:px-4">Total</th>
-              <th className="w-[28%] px-2 py-3 sm:px-4">Acciones</th>
+              <th className="w-[15%] px-2 py-3 sm:px-4">Planta</th>
+              <th className="w-[15%] px-2 py-3 sm:px-4">FC</th>
+              <th className="w-[15%] px-2 py-3 sm:px-4">FA</th>
+              <th className="w-[15%] px-2 py-3 sm:px-4">Cuaja</th>
+              <th className="w-[15%] px-2 py-3 sm:px-4">Total</th>
+              <th className="w-[25%] px-2 py-3 sm:px-4">Acciones</th>
             </tr>
           </thead>
 
@@ -667,6 +688,7 @@ function ConteoGuardadoRow({
 
   const [fc, setFc] = useState(String(item.fc));
   const [fa, setFa] = useState(String(item.fa));
+  const [cuaja, setCuaja] = useState(String(item.cuaja));
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
@@ -674,13 +696,18 @@ function ConteoGuardadoRow({
     if (!editando) {
       setFc(String(item.fc));
       setFa(String(item.fa));
+      setCuaja(String(item.cuaja));
     }
-  }, [item.fc, item.fa, editando]);
+  }, [item.fc, item.fa, item.cuaja, editando]);
 
   async function guardar() {
-    if (!esEnteroNoNegativo(fc) || !esEnteroNoNegativo(fa)) {
+    if (
+      !esEnteroNoNegativo(fc) ||
+      !esEnteroNoNegativo(fa) ||
+      !esEnteroNoNegativo(cuaja)
+    ) {
       toast.error(
-        "FC y FA deben ser números enteros mayores o iguales a 0. No se permiten decimales."
+        "FC, FA y Cuaja deben ser números enteros mayores o iguales a 0. No se permiten decimales."
       );
       return;
     }
@@ -694,7 +721,8 @@ function ConteoGuardadoRow({
       },
       body: JSON.stringify({
         fc: fc === "" ? 0 : numeroSeguro(fc),
-        fa: fa === "" ? 0 : numeroSeguro(fa)
+        fa: fa === "" ? 0 : numeroSeguro(fa),
+        cuaja: cuaja === "" ? 0 : numeroSeguro(cuaja)
       })
     });
 
@@ -758,8 +786,29 @@ function ConteoGuardadoRow({
         )}
       </td>
 
+      <td className="px-2 py-3 sm:px-4">
+        {editando ? (
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            className="input-base h-10 !px-2 sm:h-12 sm:!px-4"
+            value={cuaja}
+            onChange={(event) => {
+              const value = event.target.value.trim();
+
+              if (value === "" || esSoloDigitos(value)) {
+                setCuaja(value);
+              }
+            }}
+          />
+        ) : (
+          item.cuaja
+        )}
+      </td>
+
       <td className="px-2 py-3 font-black sm:px-4">
-        {numeroSeguro(fc) + numeroSeguro(fa)}
+        {numeroSeguro(fc) + numeroSeguro(fa) + numeroSeguro(cuaja)}
       </td>
 
       <td className="px-2 py-3 sm:px-4">

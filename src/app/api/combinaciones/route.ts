@@ -1,23 +1,21 @@
 import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
-import { calcularSemana, formatearFechaInput } from "@/lib/semana";
+import { crearFechaUtcMediodia, obtenerFechaInput } from "@/lib/fecha";
+import { calcularSemana } from "@/lib/semana";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { combinacionSchema } from "@/lib/validations";
 
-function crearRangoFecha(fecha?: string | null) {
+function crearFiltroFechaExacta(fecha?: string | null): Prisma.DateTimeFilter | null {
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
     return null;
   }
 
-  const inicio = new Date(`${fecha}T00:00:00.000Z`);
-  const fin = new Date(inicio);
-  fin.setUTCDate(fin.getUTCDate() + 1);
-
+  // La columna es DATE. Usamos mediodía UTC para evitar desfases de zona horaria
+  // al comparar desde JavaScript/Prisma/PostgreSQL.
   return {
-    gte: inicio,
-    lt: fin
+    equals: crearFechaUtcMediodia(fecha)
   };
 }
 
@@ -40,7 +38,7 @@ export async function GET(request: Request) {
   const fecha = searchParams.get("fecha");
   const exact = searchParams.get("exact") === "1";
   const buscarExacto = exact && /^\d+$/.test(q);
-  const rangoFecha = crearRangoFecha(fecha);
+  const filtroFechaExacta = crearFiltroFechaExacta(fecha);
 
   const filtroTexto: Prisma.StringFilter | undefined = q
     ? buscarExacto
@@ -60,9 +58,9 @@ export async function GET(request: Request) {
           createdById: session.id
         }
       : {}),
-    ...(rangoFecha
+    ...(filtroFechaExacta
       ? {
-          fecha: rangoFecha
+          fecha: filtroFechaExacta
         }
       : {}),
     ...(filtroTexto
@@ -88,7 +86,7 @@ export async function GET(request: Request) {
       : {})
   };
 
-  const [total, items] = await Promise.all([
+  const [total, itemsDb] = await Promise.all([
     prisma.combinacion.count({ where }),
     prisma.combinacion.findMany({
       where,
@@ -110,6 +108,11 @@ export async function GET(request: Request) {
       take: pageSize
     })
   ]);
+
+  const items = itemsDb.map((item) => ({
+    ...item,
+    fecha: obtenerFechaInput(item.fecha)
+  }));
 
   return NextResponse.json({
     items,
@@ -155,10 +158,12 @@ export async function POST(request: Request) {
     }
   });
 
+  const fechaCombinacion = crearFechaUtcMediodia(parsed.data.fecha);
+
   const existente = await prisma.combinacion.findUnique({
     where: {
-      semanaId_loteId_sectorId_variedadId: {
-        semanaId: semana.id,
+      fecha_loteId_sectorId_variedadId: {
+        fecha: fechaCombinacion,
         loteId: parsed.data.loteId,
         sectorId: parsed.data.sectorId,
         variedadId: parsed.data.variedadId
@@ -168,14 +173,17 @@ export async function POST(request: Request) {
 
   if (existente) {
     return NextResponse.json({
-      item: existente,
-      message: "La combinación ya existía."
+      item: {
+        ...existente,
+        fecha: obtenerFechaInput(existente.fecha)
+      },
+      message: "La combinación ya existía para esa fecha."
     });
   }
 
   const item = await prisma.combinacion.create({
     data: {
-      fecha: new Date(`${parsed.data.fecha}T12:00:00.000Z`),
+      fecha: fechaCombinacion,
       semanaId: semana.id,
       loteId: parsed.data.loteId,
       sectorId: parsed.data.sectorId,
@@ -185,7 +193,9 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({
-    item,
-    fecha: formatearFechaInput(item.fecha)
+    item: {
+      ...item,
+      fecha: obtenerFechaInput(item.fecha)
+    }
   });
 }

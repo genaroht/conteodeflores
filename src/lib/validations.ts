@@ -83,7 +83,8 @@ export const combinacionSchema = z.object({
 export const conteoFilaSchema = z.object({
   plantaId: textoObligatorio,
   fc: numeroNoNegativo.default(0),
-  fa: numeroNoNegativo.default(0)
+  fa: numeroNoNegativo.default(0),
+  cuaja: numeroNoNegativo.default(0)
 });
 
 export const conteosSchema = z.object({
@@ -93,5 +94,6 @@ export const conteosSchema = z.object({
 
 export const conteoUpdateSchema = z.object({
   fc: numeroNoNegativo.default(0),
-  fa: numeroNoNegativo.default(0)
+  fa: numeroNoNegativo.default(0),
+  cuaja: numeroNoNegativo.default(0)
 });

@@ -14,6 +14,7 @@ type DashboardItem = {
   variedad: string;
   fc: number;
   fa: number;
+  cuaja: number;
 };
 
 type DashboardResponse = {
@@ -67,7 +68,7 @@ export default function DashboardPage() {
               </h1>
 
               <p className="mt-2 text-sm text-slate-500">
-                Totales de FC y FA agrupados por lote, sector y variedad.
+                Totales de FC, FA y Cuaja agrupados por lote, sector y variedad.
               </p>
             </div>
 
@@ -119,6 +120,7 @@ export default function DashboardPage() {
               variedad={item.variedad}
               fc={item.fc}
               fa={item.fa}
+              cuaja={item.cuaja}
             />
           ))}
         </section>

@@ -12,6 +12,7 @@ type ConteoRow = {
   plantaNumero: string;
   fc: string;
   fa: string;
+  cuaja: string;
 };
 
 type ConteoTableProps = {
@@ -25,7 +26,8 @@ function crearFila(): ConteoRow {
     plantaId: "",
     plantaNumero: "",
     fc: "",
-    fa: ""
+    fa: "",
+    cuaja: ""
   };
 }
 
@@ -69,9 +71,10 @@ export function ConteoTable({ combinacionId, onSaved }: ConteoTableProps) {
       body: JSON.stringify({
         combinacionId,
         filas: filas.map((fila) => ({
-          plantaId: fila.plantaId,
+          plantaNumero: fila.plantaNumero,
           fc: fila.fc === "" ? 0 : Number(fila.fc),
-          fa: fila.fa === "" ? 0 : Number(fila.fa)
+          fa: fila.fa === "" ? 0 : Number(fila.fa),
+          cuaja: fila.cuaja === "" ? 0 : Number(fila.cuaja)
         }))
       })
     });
@@ -99,6 +102,7 @@ export function ConteoTable({ combinacionId, onSaved }: ConteoTableProps) {
               <th className="px-4 py-3">N° de planta</th>
               <th className="px-4 py-3">FC</th>
               <th className="px-4 py-3">FA</th>
+              <th className="px-4 py-3">Cuaja</th>
               <th className="px-4 py-3">Acción</th>
             </tr>
           </thead>
@@ -148,6 +152,20 @@ export function ConteoTable({ combinacionId, onSaved }: ConteoTableProps) {
                 </td>
 
                 <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min={0}
+                    className="input-base"
+                    value={fila.cuaja}
+                    onChange={(event) =>
+                      actualizarFila(fila.key, {
+                        cuaja: event.target.value
+                      })
+                    }
+                  />
+                </td>
+
+                <td className="px-4 py-3">
                   <button
                     type="button"
                     onClick={() => eliminarFila(fila.key)}
@@ -188,7 +206,7 @@ export function ConteoTable({ combinacionId, onSaved }: ConteoTableProps) {
               }
             />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="mb-1 block text-sm font-bold">FC</label>
                 <input
@@ -214,6 +232,21 @@ export function ConteoTable({ combinacionId, onSaved }: ConteoTableProps) {
                   onChange={(event) =>
                     actualizarFila(fila.key, {
                       fa: event.target.value
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-bold">Cuaja</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="input-base"
+                  value={fila.cuaja}
+                  onChange={(event) =>
+                    actualizarFila(fila.key, {
+                      cuaja: event.target.value
                     })
                   }
                 />

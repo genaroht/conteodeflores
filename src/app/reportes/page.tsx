@@ -6,13 +6,9 @@ import { Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EvolucionChart, type EvolucionItem } from "@/components/reportes/EvolucionChart";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { formatearFechaEsPe } from "@/lib/fecha";
 
 type Lote = {
-  id: string;
-  nombre: string;
-};
-
-type Sector = {
   id: string;
   nombre: string;
 };
@@ -32,6 +28,7 @@ type ReporteItem = {
   planta: string;
   fc: number;
   fa: number;
+  cuaja: number;
   total: number;
 };
 
@@ -44,6 +41,7 @@ type ReporteResponse = {
   resumen: {
     fc: number;
     fa: number;
+    cuaja: number;
     total: number;
   };
   evolucion: EvolucionItem[];
@@ -51,37 +49,16 @@ type ReporteResponse = {
 
 export default function ReportesPage() {
   const [lotes, setLotes] = useState<Lote[]>([]);
-  const [sectores, setSectores] = useState<Sector[]>([]);
   const [variedades, setVariedades] = useState<Variedad[]>([]);
 
   const [semana, setSemana] = useState("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [loteId, setLoteId] = useState("");
-  const [sectorId, setSectorId] = useState("");
   const [variedadId, setVariedadId] = useState("");
-  const [planta, setPlanta] = useState("");
 
   const [data, setData] = useState<ReporteResponse | null>(null);
   const [page, setPage] = useState(1);
-
-  async function cargarSectores(loteSeleccionado?: string) {
-    const query = new URLSearchParams();
-
-    query.set("pageSize", "500");
-
-    if (loteSeleccionado) {
-      query.set("loteId", loteSeleccionado);
-    }
-
-    const sectoresRes = await fetch(`/api/sectores?${query.toString()}`, {
-      cache: "no-store"
-    });
-
-    const sectoresData = await sectoresRes.json();
-
-    setSectores(sectoresData.items || []);
-  }
 
   async function cargarCombos() {
     const [lotesRes, variedadesRes] = await Promise.all([
@@ -94,8 +71,6 @@ export default function ReportesPage() {
 
     setLotes(lotesData.items || []);
     setVariedades(variedadesData.items || []);
-
-    await cargarSectores();
   }
 
   async function cargarReportes(pagina = page) {
@@ -108,9 +83,7 @@ export default function ReportesPage() {
     if (fechaDesde) query.set("fechaDesde", fechaDesde);
     if (fechaHasta) query.set("fechaHasta", fechaHasta);
     if (loteId) query.set("loteId", loteId);
-    if (sectorId) query.set("sectorId", sectorId);
     if (variedadId) query.set("variedadId", variedadId);
-    if (planta) query.set("planta", planta);
 
     const response = await fetch(`/api/reportes?${query.toString()}`, {
       cache: "no-store"
@@ -137,12 +110,6 @@ export default function ReportesPage() {
     await cargarReportes(1);
   }
 
-  async function cambiarLote(value: string) {
-    setLoteId(value);
-    setSectorId("");
-    await cargarSectores(value);
-  }
-
   return (
     <AppShell title="Reportes">
       <div className="space-y-6">
@@ -150,12 +117,12 @@ export default function ReportesPage() {
           <h1 className="text-2xl font-black text-[#10231A]">Reportes</h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Filtra según lote, sector, variedad y fechas.
+            Filtra según semana, lote, variedad y fechas.
           </p>
         </section>
 
         <section className="card-base">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-8">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <input
               className="input-base"
               value={semana}
@@ -180,19 +147,10 @@ export default function ReportesPage() {
 
             <SearchableSelect
               value={loteId}
-              onChange={cambiarLote}
+              onChange={setLoteId}
               options={lotes}
               placeholder="Todos los lotes"
               numericSort
-            />
-
-            <SearchableSelect
-              value={sectorId}
-              onChange={setSectorId}
-              options={sectores}
-              placeholder="Todos los sectores"
-              numericSort
-              disabled={!loteId && sectores.length === 0}
             />
 
             <SearchableSelect
@@ -203,13 +161,6 @@ export default function ReportesPage() {
               numericSort={false}
             />
 
-            <input
-              className="input-base"
-              value={planta}
-              onChange={(event) => setPlanta(event.target.value)}
-              placeholder="Planta"
-            />
-
             <button type="button" className="button-primary" onClick={buscar}>
               <Search className="mr-2 h-5 w-5" />
               Buscar
@@ -218,7 +169,7 @@ export default function ReportesPage() {
         </section>
 
         {data ? (
-          <section className="grid gap-4 sm:grid-cols-3">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="card-base">
               <p className="text-sm font-bold text-[#0B7A3B]">Total FC</p>
               <p className="mt-2 text-3xl font-black">{data.resumen.fc}</p>
@@ -227,6 +178,11 @@ export default function ReportesPage() {
             <div className="card-base">
               <p className="text-sm font-bold text-[#0B7A3B]">Total FA</p>
               <p className="mt-2 text-3xl font-black">{data.resumen.fa}</p>
+            </div>
+
+            <div className="card-base">
+              <p className="text-sm font-bold text-[#0B7A3B]">Total Cuaja</p>
+              <p className="mt-2 text-3xl font-black">{data.resumen.cuaja}</p>
             </div>
 
             <div className="card-base">
@@ -245,7 +201,7 @@ export default function ReportesPage() {
         ) : null}
 
         <section className="card-base overflow-x-auto">
-          <table className="w-full min-w-[1000px] text-left text-sm">
+          <table className="w-full min-w-[1100px] text-left text-sm">
             <thead className="bg-[#E8F5EE] text-[#0B7A3B]">
               <tr>
                 <th className="px-4 py-3">Semana</th>
@@ -256,6 +212,7 @@ export default function ReportesPage() {
                 <th className="px-4 py-3">Planta</th>
                 <th className="px-4 py-3">FC</th>
                 <th className="px-4 py-3">FA</th>
+                <th className="px-4 py-3">Cuaja</th>
                 <th className="px-4 py-3">Total</th>
               </tr>
             </thead>
@@ -265,7 +222,7 @@ export default function ReportesPage() {
                 <tr key={item.id} className="border-t border-[#DDE7E1]">
                   <td className="px-4 py-3">Semana {item.semana}</td>
                   <td className="px-4 py-3">
-                    {new Date(item.fecha).toLocaleDateString("es-PE")}
+                    {formatearFechaEsPe(item.fecha)}
                   </td>
                   <td className="px-4 py-3">{item.lote}</td>
                   <td className="px-4 py-3">{item.sector}</td>
@@ -273,6 +230,7 @@ export default function ReportesPage() {
                   <td className="px-4 py-3">{item.planta}</td>
                   <td className="px-4 py-3">{item.fc}</td>
                   <td className="px-4 py-3">{item.fa}</td>
+                  <td className="px-4 py-3">{item.cuaja}</td>
                   <td className="px-4 py-3 font-bold">{item.total}</td>
                 </tr>
               ))}
@@ -280,7 +238,7 @@ export default function ReportesPage() {
               {data?.items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-6 text-center text-slate-500"
                   >
                     No hay registros para mostrar.
